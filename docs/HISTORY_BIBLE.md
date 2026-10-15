@@ -50,6 +50,9 @@ so do we. Every historical element in the game should trace back to a row here.
 | **Birka grave Bj 581** (genomic study, 2017: a high-status warrior grave belonging to a woman) | Archaeological support for our shieldmaiden heroes |
 | **L'Anse aux Meadows** (Newfoundland) | The Norse site in North America: the far-west **Vínland** region |
 | **Jelling stones** (Denmark) | Runestone art style for the **Runestone Field** |
+| **Ship settings** (Lindholm Høje, Denmark; Anundshög, Sweden): graves marked by standing stones in the outline of a ship | The **Draugr Barrow** model |
+| *Skjaldborg* (shield-fort, the shieldwall) in the sagas and skaldic verse | The Shield Yard's Norse name and the Shieldwall troop |
+| *Bóndi*, *karl*, *húskarl*: free farmer, free man, a lord's sworn household warrior | Shieldwall tier names |
 | **Longhouses** (Borg in Lofoten, reconstructed halls) | The **Great Hall** with its high seat, hearth and benches |
 | **Hjallr (stockfish drying racks)**, Lofoten | Fish production building |
 | **Útibúr** (raised storehouses on posts) | The Storehouse model |

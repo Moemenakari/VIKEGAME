@@ -81,7 +81,7 @@ export class Engine {
     this.labelsRoot = document.createElement('div');
     this.labelsRoot.className = 'labels';
     container.appendChild(this.labelsRoot);
-    for (const id of this.hold.slots.keys()) {
+    for (const id of [...this.hold.slots.keys(), 'barrow']) {
       const el = document.createElement('div');
       el.className = 'plot-label';
       const text = document.createElement('span');
@@ -130,6 +130,12 @@ export class Engine {
     }
     const hall = hallLevel(state);
     for (const [id, label] of this.labels) {
+      if (id === 'barrow') {
+        label.text.textContent = `Draugr Barrow · ${Math.min(state.pve.draugrCleared + 1, 10)}`;
+        label.el.dataset.kind = 'enemy';
+        label.bar.style.display = 'none';
+        continue;
+      }
       const b = state.buildings[id];
       const job = state.queue.find((j) => j.buildingId === id);
       const slot = this.hold.slots.get(id)!;

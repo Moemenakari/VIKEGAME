@@ -102,8 +102,11 @@ On the world map, **sea routes are faster than land routes** when you own
 ships. Pathing picks the best route automatically, so it stays easy.
 
 ### 5.3 Combat resolver
-Deterministic, up to 10 rounds, in the order archers → berserkers → shieldwall.
-Hero skills trigger by round. Losses split into dead / wounded / lightly wounded,
+Deterministic, up to 10 rounds. In each round every stack on both sides strikes at the
+same moment, so no side gets a free first blow and the counter triangle decides.
+Each stack hits the type it counters if that type is still standing, otherwise the front
+line (shieldwall first). Damage = `count × ATK × counter × spread × K/(K+DEF)`.
+The attacker must leave no defender standing to win. Hero skills (M4) trigger by round. Losses split into dead / wounded / lightly wounded,
 and the Healer's House saves the wounded. A seeded RNG (±5 %) makes **battle replays** possible.
 The report reads like a **saga**: an auto-generated short story of the battle,
 written in saga style alongside the numbers ("Then Astrid's shieldwall held, and the berserkers broke upon it…").

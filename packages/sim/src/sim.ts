@@ -2,9 +2,24 @@ import { BUILDINGS, type BuildingType } from './data/buildings';
 import { ECONOMY } from './data/economy';
 import { HALL_PLOT_ID, PLOTS } from './data/plots';
 import { DAILY_QUESTS } from './data/quests';
+import { DRAUGR_BANDS, DRAUGR_UNITS } from './data/draugr';
+import { MILITARY, TRAINED_AT, TROOPS } from './data/troops';
+import { createRng } from './rng';
 import { PRODUCED_RESOURCES, RESOURCE_NAMES, type ProducedResourceId } from './data/resources';
 import type { GameEvent } from './events';
-import type { ConstructionJob, GameState } from './state';
+import type { BattleReport, ConstructionJob, GameState, ReportLine } from './state';
+import { resolveBattle, type Combatant } from './systems/combat';
+import {
+  addCounts,
+  batchLimit,
+  healCost,
+  healDurationMs,
+  sumCounts,
+  trainCost,
+  trainDurationMs,
+  woundedCapacity,
+} from './systems/military';
+import { writeSaga } from './systems/saga';
 import {
   builderSlots,
   canAfford,
@@ -25,9 +40,16 @@ import { rollQuestDay, trackQuests } from './systems/quests';
 export type Command =
   | { type: 'build'; plotId: string; building: BuildingType }
   | { type: 'upgrade'; buildingId: string }
-  | { type: 'finishFree'; buildingId: string }
-  | { type: 'finishWithGold'; buildingId: string }
-  | { type: 'claimQuest'; questId: string };
+  | { type: 'finishFree'; buildingId: string; queue?: TimerKind }
+  | { type: 'finishWithGold'; buildingId: string; queue?: TimerKind }
+  | { type: 'claimQuest'; questId: string }
+  | { type: 'train'; buildingId: string; troopId: string; count: number }
+  | { type: 'heal' }
+  | { type: 'attackDraugr'; level: number; troops: Record<string, number> }
+  | { type: 'readReport'; reportId: number };
+
+/** Which timer a finish command targets: a construction, a training batch, or healing. */
+export type TimerKind = 'build' | 'train' | 'heal';
 
 export type RuleErrorCode =
   | 'UNKNOWN'
@@ -83,6 +105,44 @@ function completeJob(state: GameState, job: ConstructionJob, events: GameEvent[]
   });
 }
 
+function completeTraining(state: GameState, job: GameState['training'][number], events: GameEvent[]): void {
+  state.training = state.training.filter((j) => j !== job);
+  addCounts(state.army.troops, { [job.troopId]: job.count });
+  events.push({
+    type: 'training.completed',
+    buildingId: job.buildingId,
+    troopId: job.troopId,
+    count: job.count,
+  });
+}
+
+function completeHealing(state: GameState, events: GameEvent[]): void {
+  const job = state.healing;
+  if (!job) return;
+  state.healing = null;
+  addCounts(state.army.troops, job.troops);
+  events.push({ type: 'healing.completed', count: sumCounts(job.troops) });
+}
+
+/** Finds a running timer and how to complete it. */
+function findTimer(
+  state: GameState,
+  kind: TimerKind,
+  buildingId: string,
+): { endsAt: number; complete: (events: GameEvent[]) => void } | null {
+  if (kind === 'heal') {
+    return state.healing
+      ? { endsAt: state.healing.endsAt, complete: (e) => completeHealing(state, e) }
+      : null;
+  }
+  if (kind === 'train') {
+    const job = state.training.find((j) => j.buildingId === buildingId);
+    return job ? { endsAt: job.endsAt, complete: (e) => completeTraining(state, job, e) } : null;
+  }
+  const job = state.queue.find((j) => j.buildingId === buildingId);
+  return job ? { endsAt: job.endsAt, complete: (e) => completeJob(state, job, e) } : null;
+}
+
 /**
  * Moves the world forward to `now`: finishes due constructions in the order they
  * end, and accrues production between them (so an upgrade that finished 3 hours
@@ -110,6 +170,9 @@ function advanceInPlace(state: GameState, now: number, events: GameEvent[]): voi
   }
   produce(state, (now - t) * scale, produced);
   state.lastTick = now;
+
+  for (const job of state.training.filter((j) => j.endsAt <= now)) completeTraining(state, job, events);
+  if (state.healing && state.healing.endsAt <= now) completeHealing(state, events);
 
   if (Object.values(produced).some((v) => v > 0)) {
     events.push({ type: 'resources.produced', amounts: produced });
@@ -204,23 +267,170 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
   },
 
   finishFree(state, cmd, now, events) {
-    const job = state.queue.find((j) => j.buildingId === cmd.buildingId);
-    if (!job) return fail('UNKNOWN', 'Nothing is being built there');
-    if (job.endsAt - now > ECONOMY.freeFinishMs)
+    const timer = findTimer(state, cmd.queue ?? 'build', cmd.buildingId);
+    if (!timer) return fail('UNKNOWN', 'Nothing is running there');
+    if (timer.endsAt - now > ECONOMY.freeFinishMs) {
       return fail('NOT_READY', 'Free finish unlocks in the last 5 minutes');
-    completeJob(state, job, events);
+    }
+    timer.complete(events);
     events.push({ type: 'finish.free', buildingId: cmd.buildingId });
     return null;
   },
 
   finishWithGold(state, cmd, now, events) {
-    const job = state.queue.find((j) => j.buildingId === cmd.buildingId);
-    if (!job) return fail('UNKNOWN', 'Nothing is being built there');
-    const gold = goldToFinish(job.endsAt - now);
+    const timer = findTimer(state, cmd.queue ?? 'build', cmd.buildingId);
+    if (!timer) return fail('UNKNOWN', 'Nothing is running there');
+    const gold = goldToFinish(timer.endsAt - now);
     if (state.resources.gold < gold) return fail('NOT_ENOUGH', 'Not enough Gold');
     state.resources.gold -= gold;
-    completeJob(state, job, events);
+    timer.complete(events);
     events.push({ type: 'finish.gold', buildingId: cmd.buildingId, gold });
+    return null;
+  },
+
+  train(state, cmd, now, events) {
+    const b = state.buildings[cmd.buildingId];
+    const troop = TROOPS[cmd.troopId];
+    if (!b || !troop || TRAINED_AT[troop.type] !== b.type)
+      return fail('UNKNOWN', 'That cannot be trained here');
+    if (b.level < 1) return fail('NOT_READY', `${BUILDINGS[b.type].name} is still being raised`);
+    if (b.level < troop.unlockLevel) {
+      return fail('LOCKED', `${troop.name} needs ${BUILDINGS[b.type].name} level ${troop.unlockLevel}`);
+    }
+    if (state.training.some((j) => j.buildingId === b.id)) return fail('BUSY', 'Already training a batch');
+    const count = Math.floor(cmd.count);
+    if (!(count >= 1)) return fail('UNKNOWN', 'Choose how many to train');
+    const limit = batchLimit(b.level);
+    if (count > limit) return fail('LIMIT', `At most ${limit} per batch at this level`);
+    const cost = trainCost(troop.id, count);
+    const missing = canAfford(state.resources, cost);
+    if (missing) return fail('NOT_ENOUGH', `Not enough ${RESOURCE_NAMES[missing]}`);
+    pay(state.resources, cost);
+    state.training.push({
+      buildingId: b.id,
+      troopId: troop.id,
+      count,
+      startedAt: now,
+      endsAt: now + trainDurationMs(troop.id, count),
+    });
+    events.push({ type: 'training.started', buildingId: b.id, troopId: troop.id, count });
+    return null;
+  },
+
+  heal(state, _cmd, now, events) {
+    if (state.healing) return fail('BUSY', 'The healers are already at work');
+    const count = sumCounts(state.army.wounded);
+    if (count === 0) return fail('NOT_READY', 'No one is wounded');
+    const cost = healCost(state.army.wounded);
+    const missing = canAfford(state.resources, cost);
+    if (missing) return fail('NOT_ENOUGH', `Not enough ${RESOURCE_NAMES[missing]}`);
+    pay(state.resources, cost);
+    state.healing = {
+      troops: { ...state.army.wounded },
+      startedAt: now,
+      endsAt: now + healDurationMs(state.army.wounded),
+    };
+    state.army.wounded = {};
+    events.push({ type: 'healing.started', count });
+    return null;
+  },
+
+  attackDraugr(state, cmd, now, events) {
+    const band = DRAUGR_BANDS.find((d) => d.level === cmd.level);
+    if (!band) return fail('UNKNOWN', 'No such barrow');
+    if (band.level > state.pve.draugrCleared + 1) {
+      return fail('LOCKED', `Defeat level ${state.pve.draugrCleared + 1} first`);
+    }
+    const sent: Record<string, number> = {};
+    for (const [id, n] of Object.entries(cmd.troops)) {
+      const count = Math.floor(n);
+      if (count <= 0) continue;
+      if (!TROOPS[id] || (state.army.troops[id] ?? 0) < count)
+        return fail('NOT_ENOUGH', 'Not enough troops at home');
+      sent[id] = count;
+    }
+    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send');
+
+    const rng = createRng(state.rngState);
+    const attackers: Combatant[] = Object.entries(sent).map(([id, count]) => {
+      const t = TROOPS[id]!;
+      return { key: id, name: t.name, type: t.type, count, atk: t.atk, def: t.def, hp: t.hp };
+    });
+    const defenders: Combatant[] = Object.entries(band.units).map(([id, count]) => {
+      const u = DRAUGR_UNITS[id]!;
+      return { key: id, name: u.name, type: u.type, count, atk: u.atk, def: u.def, hp: u.hp };
+    });
+    const outcome = resolveBattle(attackers, defenders, rng);
+
+    // The fallen: some are wounded if the healers have room, the rest are dead.
+    let room = Math.max(
+      0,
+      woundedCapacity(state) - sumCounts(state.army.wounded) - sumCounts(state.healing?.troops ?? {}),
+    );
+    const attackerLines: ReportLine[] = [];
+    let dead = 0;
+    let wounded = 0;
+    for (const s of outcome.attacker) {
+      const fallen = s.start - s.alive;
+      const hurt = Math.min(room, Math.floor(fallen * MILITARY.woundedShare));
+      room -= hurt;
+      addCounts(state.army.troops, { [s.key]: fallen }, -1);
+      if (hurt > 0) addCounts(state.army.wounded, { [s.key]: hurt });
+      dead += fallen - hurt;
+      wounded += hurt;
+      attackerLines.push({
+        unit: s.key,
+        name: s.name,
+        type: s.type,
+        start: s.start,
+        dead: fallen - hurt,
+        wounded: hurt,
+      });
+    }
+
+    const reward = outcome.attackerWon ? { ...band.reward } : {};
+    if (outcome.attackerWon) {
+      grant(state.resources, reward);
+      if (band.level > state.pve.draugrCleared) {
+        grant(state.resources, band.firstClearReward);
+        for (const [r, n] of Object.entries(band.firstClearReward)) {
+          reward[r as keyof typeof reward] = (reward[r as keyof typeof reward] ?? 0) + n;
+        }
+        state.pve.draugrCleared = band.level;
+      }
+    }
+
+    const report: BattleReport = {
+      id: state.nextReportId++,
+      at: now,
+      kind: 'draugr',
+      level: band.level,
+      title: `${outcome.attackerWon ? 'Victory' : 'Defeat'} at the Barrow · ${band.name}`,
+      won: outcome.attackerWon,
+      rounds: outcome.rounds,
+      attacker: attackerLines,
+      defender: outcome.defender.map((s) => ({
+        unit: s.key,
+        name: s.name,
+        type: s.type,
+        start: s.start,
+        dead: s.start - s.alive,
+        wounded: 0,
+      })),
+      saga: writeSaga(outcome, band.name, { dead, wounded }, reward, rng),
+      reward,
+      read: false,
+    };
+    state.rngState = rng.state;
+    state.reports = [report, ...state.reports].slice(0, MILITARY.maxReports);
+    events.push({ type: 'battle.resolved', reportId: report.id, won: report.won, level: band.level });
+    return null;
+  },
+
+  readReport(state, cmd) {
+    const report = state.reports.find((r) => r.id === cmd.reportId);
+    if (!report) return fail('UNKNOWN', 'No such report');
+    report.read = true;
     return null;
   },
 

@@ -16,6 +16,7 @@ import {
 import type { GameStore } from '../game/store';
 import { formatAmount, formatCost, formatDuration } from './format';
 import { ResourceIcon } from './icons';
+import { HealSection, TrainSection } from './military';
 
 interface Props {
   store: GameStore;
@@ -119,6 +120,10 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
           <ResourceIcon res={def.produces.resource} size={14} /> +{formatAmount(rate)} per hour
         </p>
       )}
+      {def.trains && building.level > 0 && (
+        <TrainSection key={building.id} state={state} building={building} now={now} run={run} />
+      )}
+      {def.woundedCapacity && building.level > 0 && <HealSection state={state} now={now} run={run} />}
       {def.storage && (
         <p className="stat">Storage for each resource: {formatAmount(storageCap(state).food)}</p>
       )}

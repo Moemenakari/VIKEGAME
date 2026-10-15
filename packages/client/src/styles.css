@@ -274,7 +274,9 @@ body,
 
 .toast {
   z-index: 5;
-  bottom: calc(var(--safe-bottom) + 80px);
+  /* Up top, under the resource bar, so it never covers a panel's buttons. */
+  top: calc(var(--safe-top) + 100px);
+  bottom: auto;
   max-width: min(92%, 440px);
   white-space: normal;
   text-align: center;
@@ -642,4 +644,260 @@ body,
 
 .quest-foot .muted {
   margin: 0;
+}
+
+/* ---- M3: army, barrow, reports ---------------------------------------- */
+.badge-dot.warn {
+  background: #b9822b;
+}
+
+.section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(201, 162, 74, 0.25);
+}
+
+.card h3 {
+  margin: 12px 0 4px;
+  font-family: var(--display);
+  font-size: 15px;
+  color: var(--gold);
+}
+
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.tier {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: 58px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(201, 162, 74, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font: 600 12px var(--body);
+  cursor: pointer;
+}
+
+.tier.active {
+  border-color: var(--gold);
+  background: rgba(227, 181, 82, 0.15);
+}
+
+.tier:disabled {
+  opacity: 0.45;
+}
+
+.tier small {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+
+.count-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.count-row input {
+  flex: 1;
+  accent-color: var(--gold);
+  height: 32px;
+}
+
+.count-row strong {
+  min-width: 42px;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-line {
+  margin-top: 6px !important;
+}
+
+.troop-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.troop-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 14px;
+}
+
+.troop-list small {
+  color: var(--ink-muted);
+}
+
+.troop-list strong {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.level {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(201, 162, 74, 0.4);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.level.done {
+  color: #a7c95a;
+}
+
+.level.active {
+  border-color: var(--gold);
+  background: rgba(227, 181, 82, 0.2);
+}
+
+.level:disabled {
+  opacity: 0.35;
+}
+
+.send-list {
+  display: grid;
+  gap: 4px;
+}
+
+.send-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 14px;
+}
+
+.send-item input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--gold);
+}
+
+.verdict strong {
+  color: var(--gold);
+}
+
+.verdict.risky strong {
+  color: #ff8a6a;
+}
+
+.verdict.favourable strong {
+  color: #a7c95a;
+}
+
+.report .banner {
+  margin: 0 0 4px !important;
+  font-family: var(--display);
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.report .banner.won {
+  color: #a7c95a;
+}
+
+.report .banner.lost {
+  color: #ff8a6a;
+}
+
+.saga {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-inline-start: 3px solid var(--gold);
+  background: rgba(227, 181, 82, 0.06);
+  font-family: Georgia, serif;
+  font-style: italic;
+}
+
+.saga p {
+  margin: 0 0 6px !important;
+}
+
+.losses {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.losses th {
+  text-align: start;
+  color: var(--ink-muted);
+  font-weight: 600;
+  padding: 8px 4px 4px;
+}
+
+.losses td {
+  padding: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.report-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(201, 162, 74, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font: 14px var(--body);
+  text-align: start;
+  cursor: pointer;
+}
+
+.report-item.unread {
+  border-color: var(--gold);
+}
+
+.report-item .won {
+  color: #a7c95a;
+  font-weight: 700;
+}
+
+.report-item .lost {
+  color: #ff8a6a;
+  font-weight: 700;
+}
+
+.plot-label[data-kind='enemy'] span {
+  color: #bfe9ff;
+  border: 1px solid rgba(111, 211, 255, 0.6);
+  background: rgba(10, 20, 30, 0.8);
 }

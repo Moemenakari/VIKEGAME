@@ -13,3 +13,7 @@ export * from './events';
 export * from './systems/economy';
 export * from './sim';
 export * from './save';
+export * from './data/troops';
+export * from './data/draugr';
+export * from './systems/combat';
+export * from './systems/military';

@@ -33,7 +33,9 @@ const ring = (
 
 export const HALL_PLOT_ID = 'hall';
 
+const OUTER_UNLOCKS = [3, 3, 3, 5, 5, 5, 7, 7, 9, 9];
+
 export const PLOTS: readonly PlotDef[] = [
-  ...ring(6, 11.5, Math.PI / 6, () => 1, 'a'),
-  ...ring(6, 18.5, 0, (i) => (i % 2 === 0 ? 3 : 5), 'b'),
+  ...ring(8, 11.5, Math.PI / 8, () => 1, 'a'),
+  ...ring(10, 18.5, 0, (i) => OUTER_UNLOCKS[i] ?? 9, 'b'),
 ];

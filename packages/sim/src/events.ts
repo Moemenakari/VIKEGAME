@@ -11,4 +11,9 @@ export type GameEvent =
   | { type: 'resources.produced'; amounts: Partial<Record<ProducedResourceId, number>> }
   | { type: 'quests.reset'; day: number }
   | { type: 'quest.completed'; questId: string }
-  | { type: 'quest.claimed'; questId: string; reward: Cost };
+  | { type: 'quest.claimed'; questId: string; reward: Cost }
+  | { type: 'training.started'; buildingId: string; troopId: string; count: number }
+  | { type: 'training.completed'; buildingId: string; troopId: string; count: number }
+  | { type: 'healing.started'; count: number }
+  | { type: 'healing.completed'; count: number }
+  | { type: 'battle.resolved'; reportId: number; won: boolean; level: number };

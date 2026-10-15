@@ -62,3 +62,14 @@ describe('generateHoldTerrain', () => {
     }
   });
 });
+
+describe('the draugr barrow', () => {
+  it('stands on dry land outside the settlement, clear of trees', () => {
+    for (const seed of [20260930, 1, 2, 3]) {
+      const t = generateHoldTerrain(seed);
+      expect(sampleHeight(t, t.barrow.x, t.barrow.z)).toBeGreaterThan(t.waterLevel);
+      expect(Math.hypot(t.barrow.x - t.hall.x, t.barrow.z - t.hall.z)).toBeGreaterThan(24);
+      for (const tr of t.trees) expect(Math.hypot(tr.x - t.barrow.x, tr.z - t.barrow.z)).toBeGreaterThan(6);
+    }
+  });
+});

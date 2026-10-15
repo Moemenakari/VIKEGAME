@@ -11,11 +11,11 @@ crowned King of the North.
 > **Challenge #10:** a full 4X mobile strategy game, designed and engineered with **Claude Code**,
 > using only free and open-source tools.
 
-**Status:** 🏠 **M2: The Hold.** Build and upgrade a Viking settlement: farms, fish racks, woodcutters, a raised storehouse, a market and a bog-iron smelter. Timers, production while you are away, daily quests, and saving on your device.
+**Status:** ⚔️ **M3: Military.** Raise a Shield Yard, a Bowyer's Range and a Wolf-skin Lodge; train the Shieldwall, Berserkers and Archers (each breaks one other); heal the wounded; and clear ten levels of the Draugr Barrow, a burial mound in a ship-shaped stone setting. Every battle is told as a short saga. (M2 brought the Hold: buildings, timers, offline production, daily quests and saves.)
 
 ### ▶️ Play the preview: **https://moemenakari.github.io/VIKEGAME/**
 
-![Jarlheim M2 — the hold, the build menu, construction and daily quests](docs/screenshots/m2-hold.jpg)
+![Jarlheim M3 — the hold, training at the Shield Yard, the Draugr Barrow and a saga battle report](docs/screenshots/m3-army.jpg)
 
 ---
 

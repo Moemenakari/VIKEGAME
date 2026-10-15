@@ -56,3 +56,46 @@ test('build, finish, save and claim a quest on a phone', async ({ page }) => {
 
   expect(errors).toEqual([]);
 });
+
+test('raise a Shield Yard, train warriors and clear the first draugr barrow', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  await page.goto('/');
+  await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
+  const state = () => page.evaluate(() => window.__jarlheim!.state());
+
+  // Great Hall to level 2 (finish free: the timer is under 5 minutes).
+  await tapPlot(page, 'hall');
+  await page.getByTestId('upgrade').click();
+  await tapPlot(page, 'hall');
+  await page.getByTestId('finish-free').click();
+  await expect.poll(async () => (await state()).buildings.hall?.level).toBe(2);
+
+  // Shield Yard on an open plot.
+  await tapPlot(page, 'a3');
+  await page.getByTestId('build-shieldYard').click();
+  await tapPlot(page, 'a3');
+  await page.getByTestId('finish-free').click();
+  await expect.poll(async () => (await state()).buildings.a3?.level).toBe(1);
+
+  // Train 25 levies and finish the batch.
+  await tapPlot(page, 'a3');
+  await page.getByTestId('train-count').fill('25');
+  await page.getByTestId('train').click();
+  await page.getByTestId('train-finish-free').click();
+  await expect.poll(async () => (await state()).army.troops['shieldwall-1']).toBe(25);
+  await page.screenshot({ path: 'test-results/shield-yard.png' });
+  await page.getByLabel('Close').click();
+
+  // March on the barrow: the saga report opens.
+  await page.getByTestId('army-button').click();
+  await page.getByTestId('to-barrow').click();
+  await page.screenshot({ path: 'test-results/barrow.png' });
+  await page.getByTestId('attack').click();
+  await expect(page.getByTestId('report')).toContainText('Victory');
+  await page.screenshot({ path: 'test-results/report.png' });
+  expect((await state()).pve.draugrCleared).toBe(1);
+
+  expect(errors).toEqual([]);
+});

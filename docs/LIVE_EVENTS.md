@@ -41,6 +41,7 @@ Day 4 first ship → Day 5 first rally (Fáfnir's hatchling) → Day 6 first Sil
 Day 7 raise your first runestone. Each day gives a guaranteed hero or Gold.
 
 ## 5. Build order
-Events are built in this order, matching ROADMAP milestones: daily quests (M2) → Draugr Night (M3) →
+Events are built in this order, matching ROADMAP milestones: daily quests (M2) → **Draugr Barrows** PvE
+(M3: ten levels of draugr bands beside your hold, the first battles) → Draugr Night (tower defence, M7) →
 Thor's Fishing solo (M4) → Wolf Hunt & Fáfnir rally (M6/M7) → Giant Siege, Hólmganga, Clan Duel (M7) →
 Midsummer Thing (M8) → Ragnarök & festivals (M9).

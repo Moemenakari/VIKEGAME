@@ -73,3 +73,39 @@ export const ResourceIcon = ({ res, size = 18 }: { res: keyof typeof BY_RESOURCE
   const Icon = BY_RESOURCE[res];
   return <Icon size={size} />;
 };
+
+/** Troop-type marks: round shield (Shieldwall), bearded axe (Berserker), yew bow (Archer). */
+export const TroopTypeIcon = ({
+  type,
+  size = 18,
+}: {
+  type: 'shieldwall' | 'berserker' | 'archer';
+  size?: number;
+}) => {
+  if (type === 'shieldwall') {
+    return svg(
+      size,
+      <g>
+        <circle cx="12" cy="12" r="9" fill="#a83a2c" stroke="#e9e1cf" strokeWidth="1.5" />
+        <circle cx="12" cy="12" r="2.6" fill="#c9c4b8" />
+      </g>,
+    );
+  }
+  if (type === 'berserker') {
+    return svg(
+      size,
+      <g>
+        <rect x="11" y="3" width="2" height="18" rx="1" fill="#9a6a3a" />
+        <path d="M13 4c5 0 7 3 7 6-2-1-4-1-7 0z" fill="#c9d0d6" />
+      </g>,
+    );
+  }
+  return svg(
+    size,
+    <g fill="none" strokeLinecap="round">
+      <path d="M7 3c8 4 8 14 0 18" stroke="#c48a4a" strokeWidth="2.2" />
+      <path d="M7 3v18" stroke="#e9e1cf" strokeWidth="1" />
+      <path d="M4 12h15M16 9l3 3-3 3" stroke="#c9d0d6" strokeWidth="1.6" />
+    </g>,
+  );
+};

@@ -3,7 +3,9 @@ import {
   DAILY_QUESTS,
   PRODUCED_RESOURCES,
   RESOURCE_NAMES,
+  TROOPS,
   builderSlots,
+  sumCounts,
   storageCap,
   totalPower,
   type GameEvent,
@@ -17,6 +19,7 @@ import { formatAmount } from './format';
 import { GoldIcon, PowerIcon, ResourceIcon } from './icons';
 import { PlotPanel } from './PlotPanel';
 import { QuestsPanel, claimableQuests } from './QuestsPanel';
+import { ArmyPanel, BarrowPanel, ReportView, ReportsPanel } from './military';
 
 declare global {
   interface Window {
@@ -44,6 +47,10 @@ function describe(e: GameEvent): string | null {
     }
     case 'quests.reset':
       return 'New daily quests are here';
+    case 'training.completed':
+      return `${e.count} ${TROOPS[e.troopId]?.name ?? 'warriors'} are ready`;
+    case 'healing.completed':
+      return `${e.count} warriors have healed`;
     default:
       return null;
   }
@@ -106,11 +113,20 @@ function Game({
   const [quality] = useState(loadQuality);
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
-  const [panel, setPanel] = useState<'quests' | 'settings' | null>(null);
+  const [panel, setPanel] = useState<'quests' | 'settings' | 'army' | 'barrow' | 'reports' | null>(null);
+  const [reportId, setReportId] = useState<number | null>(null);
   const [fps, setFps] = useState(0);
   const [showHelp, setShowHelp] = useState(true);
 
   const select = useCallback((id: string | null) => {
+    setReportId(null);
+    if (id === 'barrow') {
+      setSelected(null);
+      setPanel('barrow');
+      engineRef.current?.setSelected(null);
+      setShowHelp(false);
+      return;
+    }
     setSelected(id);
     setPanel(null);
     engineRef.current?.setSelected(id);
@@ -175,6 +191,21 @@ function Game({
   const slots = builderSlots(state);
   const claimable = claimableQuests(state);
   const onError = (message: string) => setToast(message);
+  const openPanel = (p: typeof panel) => {
+    setSelected(null);
+    setReportId(null);
+    engineRef.current?.setSelected(null);
+    setPanel(panel === p ? null : p);
+  };
+  const openReport = (id: number) => {
+    setPanel(null);
+    setSelected(null);
+    setReportId(id);
+    store.dispatch({ type: 'readReport', reportId: id });
+  };
+  const report = reportId !== null ? state.reports.find((r) => r.id === reportId) : undefined;
+  const unread = state.reports.filter((r) => !r.read).length;
+  const warriors = sumCounts(state.army.troops);
 
   return (
     <div className="app">
@@ -218,15 +249,16 @@ function Game({
           <span className="glyph">⚒</span>
           {busy}/{slots}
         </div>
-        <button
-          className="side-chip"
-          onClick={() => {
-            setSelected(null);
-            engineRef.current?.setSelected(null);
-            setPanel(panel === 'quests' ? null : 'quests');
-          }}
-          data-testid="quests-button"
-        >
+        <button className="side-chip" onClick={() => openPanel('army')} data-testid="army-button">
+          <span className="glyph">⚔</span>
+          {warriors}
+          {sumCounts(state.army.wounded) > 0 && <span className="badge-dot warn">+</span>}
+        </button>
+        <button className="side-chip" onClick={() => openPanel('reports')} data-testid="reports-button">
+          <span className="glyph">ᛋ</span>Sagas
+          {unread > 0 && <span className="badge-dot">{unread}</span>}
+        </button>
+        <button className="side-chip" onClick={() => openPanel('quests')} data-testid="quests-button">
           <span className="glyph">ᛟ</span>Quests
           {claimable > 0 && <span className="badge-dot">{claimable}</span>}
         </button>
@@ -255,6 +287,31 @@ function Game({
           <p className="soon">Silver Road voyages arrive in M6</p>
         </section>
       )}
+      {panel === 'army' && (
+        <ArmyPanel
+          state={state}
+          now={store.now()}
+          run={(cmd) => {
+            const err = store.dispatch(cmd);
+            if (err) onError(err.message);
+          }}
+          onClose={() => setPanel(null)}
+          onBarrow={() => setPanel('barrow')}
+        />
+      )}
+      {panel === 'barrow' && (
+        <BarrowPanel
+          state={state}
+          store={store}
+          onClose={() => setPanel(null)}
+          onReport={openReport}
+          onError={onError}
+        />
+      )}
+      {panel === 'reports' && (
+        <ReportsPanel state={state} onOpen={openReport} onClose={() => setPanel(null)} />
+      )}
+      {report && <ReportView report={report} onClose={() => setReportId(null)} />}
       {panel === 'quests' && (
         <QuestsPanel store={store} state={state} onClose={() => setPanel(null)} onError={onError} />
       )}
@@ -307,12 +364,12 @@ function Game({
           >
             Start a new hold
           </button>
-          <p className="muted">{Math.round(fps)} fps · M2 preview · saved on this device</p>
+          <p className="muted">{Math.round(fps)} fps · M3 preview · saved on this device</p>
         </section>
       )}
 
       <Splash visible={!ready} />
-      <div className="badge">M2 · preview</div>
+      <div className="badge">M3 · preview</div>
     </div>
   );
 }

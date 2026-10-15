@@ -32,6 +32,8 @@ export interface HoldTerrain {
   harbor: { x: number; z: number; heading: number };
   trees: Prop[];
   rocks: Prop[];
+  /** The draugr barrow (burial mound) outside the settlement. */
+  barrow: { x: number; y: number; z: number };
 }
 
 const smoothstep = (e0: number, e1: number, x: number): number => {
@@ -102,7 +104,9 @@ export function generateHoldTerrain(seed: number): HoldTerrain {
     harbor: { x: 0.34 * half, z: 0.5 * half, heading: -0.5 },
     trees: [],
     rocks: [],
+    barrow: { x: hallX, y: cfg.plateauHeight, z: hallZ },
   };
+  terrain.barrow = findBarrowSite(terrain);
 
   const rng = createRng(hashString(`props:${seed}`));
   const forest = createNoise2D(hashString(`forest:${seed}`));
@@ -125,6 +129,11 @@ export function generateHoldTerrain(seed: number): HoldTerrain {
     });
   }
 
+  // Keep the barrow clear of trees.
+  terrain.trees = terrain.trees.filter(
+    (tr) => Math.hypot(tr.x - terrain.barrow.x, tr.z - terrain.barrow.z) > 6,
+  );
+
   for (let i = 0; i < cfg.rockAttempts; i++) {
     const { x, z } = randomPoint();
     const y = sampleHeight(terrain, x, z);
@@ -134,6 +143,30 @@ export function generateHoldTerrain(seed: number): HoldTerrain {
   }
 
   return terrain;
+}
+
+/**
+ * A burial mound stands on open dry ground beyond the settlement: the first spot,
+ * scanning outward and round, that is dry, gentle and away from the plots.
+ */
+function findBarrowSite(t: HoldTerrain): { x: number; y: number; z: number } {
+  // First choice: the shoreline in front of the hold, where the default camera looks.
+  const front = [0.3, 0.7, 0.25, 0.75, 0.2, 0.8].map((f) => f * Math.PI);
+  const sweep = Array.from({ length: 24 }, (_, k) => (k * Math.PI * 2) / 24);
+  for (const [angles, radii] of [
+    [front, [25, 26, 27]],
+    [sweep, [28, 32, 36, 40, 44]],
+  ] as const) {
+    for (const r of radii) {
+      for (const a of angles) {
+        const x = t.hall.x + Math.cos(a) * r;
+        const z = t.hall.z + Math.sin(a) * r;
+        const y = sampleHeight(t, x, z);
+        if (y > t.waterLevel + 1 && y < 9 && slopeAt(t, x, z) < 0.3) return { x, y, z };
+      }
+    }
+  }
+  return { x: t.hall.x, y: t.hall.y, z: t.hall.z - 26 };
 }
 
 /** Bilinear height lookup at world position (x, z). Clamped to the map edge. */

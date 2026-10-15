@@ -26,4 +26,6 @@ Every significant decision, with the reason. Status: **✅ Owner-approved** · *
 | D-021 | **M1 models are procedural** (built in code): terrain, spruces, longhouses, longship | Zero licence risk, tiny download (≈220 KB gzip total JS), and historically shaped (Trelleborg halls, Oseberg ship). CC0 / Blender assets come later where code is not enough | 🟡 |
 | D-022 | **The "one trip" rule (no N+1)**: one save record, batched writes, one draw call per building, aggregated events, batched server queries. See ARCHITECTURE §14 | Owner's request, after a video on the N+1 problem (`SELECT … WHERE id IN (…)` instead of 100 queries) | ✅ |
 | D-023 | Buildings are capped at the Great Hall level, and Great Hall 3+ needs the Storehouse at one level below | The genre's core gate. It teaches that the Storehouse matters | 🟡 |
+| D-024 | **Battles are simultaneous per round** (no phase order) | Tests showed a phase order gave berserkers a free first blow that cancelled the Shieldwall counter. Simultaneous strikes keep the triangle fair | ✅ (technical) |
+| D-025 | **First PvE is the Draugr Barrow** next to the hold (10 levels, first-clear Gold) before the world map exists | Lets players fight from M3 on, and the barrow later moves onto the Midgard map (M6) | 🟡 |
 | D-019 | No slavery (thralls) and no horned helmets | Ethics, and historical accuracy | 🟡 |

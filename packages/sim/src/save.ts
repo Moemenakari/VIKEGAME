@@ -1,6 +1,6 @@
 import { BUILDING_TYPES } from './data/buildings';
 import { RESOURCES } from './data/resources';
-import { STATE_VERSION, type GameState } from './state';
+import { STATE_VERSION, emptyMilitary, type GameState } from './state';
 
 /**
  * Save format: the WHOLE game in one JSON document, written and read in one trip
@@ -13,7 +13,10 @@ interface SaveFile {
 }
 
 /** migrations[n] upgrades a version-n state to version n+1. */
-const migrations: Record<number, (state: Record<string, unknown>) => Record<string, unknown>> = {};
+const migrations: Record<number, (state: Record<string, unknown>) => Record<string, unknown>> = {
+  // v1 → v2 (M3): the hold gains an army, training and healing queues, reports and PvE progress.
+  1: (state) => ({ ...emptyMilitary(typeof state.seed === 'number' ? state.seed : 1), ...state }),
+};
 
 export function serialize(state: GameState): string {
   const file: SaveFile = { format: 'jarlheim-save', version: state.version, state };
@@ -23,6 +26,8 @@ export function serialize(state: GameState): string {
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isCounts = (v: unknown): v is Record<string, number> =>
+  isObj(v) && Object.values(v).every((n) => isNum(n) && n >= 0);
 
 function isGameState(s: unknown): s is GameState {
   if (!isObj(s)) return false;
@@ -53,7 +58,14 @@ function isGameState(s: unknown): s is GameState {
     }
   }
   const q = s.quests;
-  return isObj(q) && isNum(q.day) && isObj(q.progress) && Array.isArray(q.claimed);
+  if (!isObj(q) || !isNum(q.day) || !isObj(q.progress) || !Array.isArray(q.claimed)) return false;
+  const army = s.army;
+  if (!isObj(army) || !isCounts(army.troops) || !isCounts(army.wounded)) return false;
+  if (!Array.isArray(s.training) || !Array.isArray(s.reports)) return false;
+  if (s.healing !== null && !(isObj(s.healing) && isCounts(s.healing.troops) && isNum(s.healing.endsAt))) {
+    return false;
+  }
+  return isNum(s.nextReportId) && isObj(s.pve) && isNum(s.pve.draugrCleared) && isNum(s.rngState);
 }
 
 /** Returns the saved game, upgraded to the current version, or null if the save is unusable. */

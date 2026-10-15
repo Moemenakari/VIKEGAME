@@ -1,4 +1,5 @@
 import type { Cost, ProducedResourceId } from './resources';
+import type { TroopType } from './troops';
 
 /** Buildings available in M2 (GDD §4.1). More arrive with later milestones. */
 export const BUILDING_TYPES = [
@@ -9,6 +10,10 @@ export const BUILDING_TYPES = [
   'smelter',
   'market',
   'storehouse',
+  'shieldYard',
+  'bowyerRange',
+  'wolfLodge',
+  'healersHouse',
 ] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];
 
@@ -32,6 +37,10 @@ export interface BuildingDef {
   produces?: { resource: ProducedResourceId; perHour: number; growth: number };
   /** Extra storage for every produced resource at level 1, growing per level. */
   storage?: { perLevel: number; growth: number };
+  /** Trains this troop type (GDD §5). */
+  trains?: TroopType;
+  /** Extra wounded the hold can care for, at level 1, growing per level. */
+  woundedCapacity?: { perLevel: number; growth: number };
   /** Power gained per level. */
   power: number;
   /**
@@ -138,6 +147,62 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
     baseSeconds: 15,
     timeGrowth: 1.55,
     storage: { perLevel: 4_000, growth: 1.3 },
+    power: 30,
+  },
+  shieldYard: {
+    type: 'shieldYard',
+    name: 'Shield Yard',
+    norse: 'Skjaldborg',
+    description: 'Where farmers learn to lock shields. Trains the Shieldwall, which breaks Berserkers.',
+    unlockHall: 2,
+    maxCount: 1,
+    baseCost: { timber: 260, food: 160 },
+    costGrowth: 1.5,
+    baseSeconds: 20,
+    timeGrowth: 1.55,
+    trains: 'shieldwall',
+    power: 40,
+  },
+  bowyerRange: {
+    type: 'bowyerRange',
+    name: "Bowyer's Range",
+    norse: 'Ýr',
+    description: 'Yew bows and straw targets. Trains Archers, who break the Shieldwall.',
+    unlockHall: 3,
+    maxCount: 1,
+    baseCost: { timber: 320, food: 140 },
+    costGrowth: 1.5,
+    baseSeconds: 25,
+    timeGrowth: 1.55,
+    trains: 'archer',
+    power: 40,
+  },
+  wolfLodge: {
+    type: 'wolfLodge',
+    name: 'Wolf-skin Lodge',
+    norse: 'Úlfheðnar',
+    description: 'Warriors in wolf pelts who fight in a fury. Trains Berserkers, who break Archers.',
+    unlockHall: 4,
+    maxCount: 1,
+    baseCost: { timber: 300, food: 260 },
+    costGrowth: 1.5,
+    baseSeconds: 30,
+    timeGrowth: 1.55,
+    trains: 'berserker',
+    power: 40,
+  },
+  healersHouse: {
+    type: 'healersHouse',
+    name: "Healer's House",
+    norse: 'Læknishús',
+    description: 'Herbs, linen and patient hands. Wounded warriors recover here instead of dying.',
+    unlockHall: 2,
+    maxCount: 1,
+    baseCost: { timber: 220, food: 120 },
+    costGrowth: 1.5,
+    baseSeconds: 18,
+    timeGrowth: 1.55,
+    woundedCapacity: { perLevel: 120, growth: 1.25 },
     power: 30,
   },
 };

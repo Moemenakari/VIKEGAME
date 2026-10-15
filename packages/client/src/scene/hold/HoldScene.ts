@@ -6,6 +6,7 @@ import { SKY, createSky } from '../sky';
 import { createSmoke, createSnow, type Particles } from '../fx/particles';
 import {
   FOOTPRINT,
+  createBarrow,
   createBuildingModel,
   createEmptyPlot,
   createFooting,
@@ -107,6 +108,15 @@ export class HoldScene {
     this.smoke = createSmoke(hallPos.clone().add(new THREE.Vector3(0, 6, 0)));
     scene.add(this.smoke.points);
 
+    // The draugr barrow outside the settlement.
+    const barrow = createBarrow();
+    barrow.position.set(terrain.barrow.x, terrain.barrow.y - 0.1, terrain.barrow.z);
+    barrow.scale.setScalar(0.7);
+    barrow.rotation.y =
+      Math.atan2(terrain.hall.x - terrain.barrow.x, terrain.hall.z - terrain.barrow.z) - Math.PI / 2;
+    scene.add(barrow);
+    this.addPickable('barrow', barrow, new THREE.Vector3(16, 6, 10));
+
     // The longship at anchor in the fjord.
     this.ship = createLongship();
     this.ship.group.position.set(terrain.harbor.x, terrain.waterLevel, terrain.harbor.z);
@@ -205,8 +215,11 @@ export class HoldScene {
     return entry.object.getWorldPosition(new THREE.Vector3());
   }
 
-  /** Where a plot's floating label sits. */
+  /** Where a plot's (or the barrow's) floating label sits. */
   labelAnchor(id: string, target: THREE.Vector3): THREE.Vector3 {
+    if (id === 'barrow') {
+      return target.set(this.terrain.barrow.x, this.terrain.barrow.y + 3.5, this.terrain.barrow.z);
+    }
     const slot = this.slots.get(id)!;
     return target.copy(slot.group.position).setY(slot.group.position.y + slot.labelHeight);
   }

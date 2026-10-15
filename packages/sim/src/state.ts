@@ -1,7 +1,8 @@
 import type { BuildingType } from './data/buildings';
 import { ECONOMY } from './data/economy';
 import { HALL_PLOT_ID } from './data/plots';
-import type { Resources } from './data/resources';
+import type { Cost, Resources } from './data/resources';
+import type { TroopType } from './data/troops';
 
 /** One building on one plot. Its id is the plot id (one building per plot). */
 export interface Building {
@@ -16,6 +17,48 @@ export interface ConstructionJob {
   targetLevel: number;
   startedAt: number;
   endsAt: number;
+}
+
+export interface TrainingJob {
+  buildingId: string;
+  troopId: string;
+  count: number;
+  startedAt: number;
+  endsAt: number;
+}
+
+export interface HealingJob {
+  troops: Record<string, number>;
+  startedAt: number;
+  endsAt: number;
+}
+
+/** One line of a battle report: a stack of troops and what happened to it. */
+export interface ReportLine {
+  unit: string;
+  name: string;
+  type: TroopType;
+  start: number;
+  /** Fell for good. */
+  dead: number;
+  /** Carried home to heal (player side only). */
+  wounded: number;
+}
+
+export interface BattleReport {
+  id: number;
+  at: number;
+  kind: 'draugr';
+  level: number;
+  title: string;
+  won: boolean;
+  rounds: number;
+  attacker: ReportLine[];
+  defender: ReportLine[];
+  /** The battle told as a short saga (generated, our own words). */
+  saga: string[];
+  reward: Cost;
+  read: boolean;
 }
 
 export interface DailyQuestState {
@@ -39,9 +82,23 @@ export interface GameState {
   buildings: Record<string, Building>;
   queue: ConstructionJob[];
   quests: DailyQuestState;
+  army: {
+    /** Healthy troops at home, by troop id (e.g. "shieldwall-1"). */
+    troops: Record<string, number>;
+    /** Wounded troops waiting for the healers. */
+    wounded: Record<string, number>;
+  };
+  training: TrainingJob[];
+  healing: HealingJob | null;
+  /** Battle reports, newest first (the hold's mail). */
+  reports: BattleReport[];
+  nextReportId: number;
+  pve: { draugrCleared: number };
+  /** Seeded RNG state for battles, so the same game always plays out the same. */
+  rngState: number;
 }
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
@@ -60,5 +117,22 @@ export function newGame(seed: number, now: number): GameState {
     },
     queue: [],
     quests: { day: dayIndex(now), progress: {}, claimed: [] },
+    ...emptyMilitary(seed),
   };
+}
+
+/** Military fields added in save version 2 (M3). Also used to migrate version-1 saves. */
+export function emptyMilitary(seed: number) {
+  return {
+    army: { troops: {}, wounded: {} },
+    training: [],
+    healing: null,
+    reports: [],
+    nextReportId: 1,
+    pve: { draugrCleared: 0 },
+    rngState: (seed ^ 0x9e3779b9) >>> 0,
+  } satisfies Pick<
+    GameState,
+    'army' | 'training' | 'healing' | 'reports' | 'nextReportId' | 'pve' | 'rngState'
+  >;
 }

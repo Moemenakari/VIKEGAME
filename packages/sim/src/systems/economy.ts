@@ -9,6 +9,7 @@ import {
 } from '../data/resources';
 import { HALL_PLOT_ID } from '../data/plots';
 import type { GameState } from '../state';
+import { troopPower } from './military';
 
 /** Rounds costs to friendly numbers: 10s below 1,000, 50s below 10,000, then 100s. */
 function niceRound(n: number): number {
@@ -75,7 +76,7 @@ export function storageCap(state: GameState): Record<ProducedResourceId, number>
 }
 
 export function totalPower(state: GameState): number {
-  let power = 0;
+  let power = troopPower(state);
   for (const b of Object.values(state.buildings)) {
     const per = BUILDINGS[b.type].power;
     // Each level is worth a little more than the last.

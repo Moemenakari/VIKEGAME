@@ -21,6 +21,10 @@ function metricAmount(event: GameEvent, metric: QuestMetric): number {
       return event.type === 'resources.produced' ? (event.amounts.food ?? 0) : 0;
     case 'produced.timber':
       return event.type === 'resources.produced' ? (event.amounts.timber ?? 0) : 0;
+    case 'troops.trained':
+      return event.type === 'training.completed' ? event.count : 0;
+    case 'battle.won':
+      return event.type === 'battle.resolved' && event.won ? 1 : 0;
   }
 }
 

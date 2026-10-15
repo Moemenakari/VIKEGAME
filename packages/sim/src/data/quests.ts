@@ -2,7 +2,13 @@ import type { Cost } from './resources';
 
 /** What a daily quest counts. Each metric is fed by a simulation event. */
 export type QuestMetric =
-  'construction.started' | 'building.completed' | 'produced.food' | 'produced.timber' | 'finish.free';
+  | 'construction.started'
+  | 'building.completed'
+  | 'produced.food'
+  | 'produced.timber'
+  | 'finish.free'
+  | 'troops.trained'
+  | 'battle.won';
 
 export interface QuestDef {
   id: string;
@@ -43,4 +49,18 @@ export const DAILY_QUESTS: readonly QuestDef[] = [
     reward: { gold: 10 },
   },
   { id: 'free-finish', title: 'Use a free finish', metric: 'finish.free', target: 1, reward: { gold: 5 } },
+  {
+    id: 'train-30',
+    title: 'Train 30 warriors',
+    metric: 'troops.trained',
+    target: 30,
+    reward: { food: 600, gold: 5 },
+  },
+  {
+    id: 'win-battle',
+    title: 'Defeat a draugr band',
+    metric: 'battle.won',
+    target: 1,
+    reward: { silver: 150, gold: 5 },
+  },
 ];
