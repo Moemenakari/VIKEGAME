@@ -1,0 +1,38 @@
+{
+  "name": "jarlheim",
+  "private": true,
+  "type": "module",
+  "description": "Jarlheim — a free 3D mobile strategy game set in the Viking Age",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "packages/sim",
+    "packages/client"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @jarlheim/client",
+    "build": "npm run build -w @jarlheim/client",
+    "preview": "npm run preview -w @jarlheim/client",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "size": "node scripts/check-size.mjs",
+    "e2e": "npm run e2e -w @jarlheim/client",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build && npm run size"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "eslint": "10.12.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}

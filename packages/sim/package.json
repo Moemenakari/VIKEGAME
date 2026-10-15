@@ -1,0 +1,10 @@
+{
+  "name": "@jarlheim/sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure, deterministic game rules for Jarlheim. No DOM, no rendering.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

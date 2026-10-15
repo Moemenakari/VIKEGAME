@@ -11,7 +11,11 @@ crowned King of the North.
 > **Challenge #10:** a full 4X mobile strategy game, designed and engineered with **Claude Code**,
 > using only free and open-source tools.
 
-**Status:** 🧱 **M0: Foundations (pre-production).** Design first, code next.
+**Status:** 🏔️ **M1: Tech skeleton.** A 3D snowy fjord hold you can explore on your phone.
+
+### ▶️ Play the preview: **https://moemenakari.github.io/VIKEGAME/**
+
+![Jarlheim M1 — the hold, the fjord and the longship](docs/screenshots/m1-hold.jpg)
 
 ---
 
@@ -33,6 +37,15 @@ crowned King of the North.
 | [Monetization Plan](docs/MONETIZATION.md) | Free now. How a fair Gold store would work if the game succeeds |
 | [Decision Log](docs/DECISIONS.md) | Every key decision and why |
 | [Reference Analysis](docs/REFERENCE_ANALYSIS.md) | The genre's systems, reverse-engineered (mechanics only) |
+
+## 🚀 Run it yourself (free and easy)
+Requires [Node.js 22+](https://nodejs.org).
+```bash
+npm install
+npm run dev        # opens the game at http://localhost:5173 (also reachable from your phone on the same Wi-Fi)
+npm run check      # typecheck + lint + format + unit tests + build + bundle-size budget
+npm run e2e        # phone-sized browser smoke test with screenshots
+```
 
 ## 🛠️ Tech stack (all free)
 TypeScript · Three.js · React · Vite · Vitest · Playwright · Capacitor (Android) · GitHub Actions · GitHub Pages

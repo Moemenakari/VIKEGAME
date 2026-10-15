@@ -20,4 +20,8 @@ and `docs/DECISIONS.md` before changing anything.
 - Record significant decisions in `docs/DECISIONS.md`.
 
 ## Commands
-Added in M1 (`npm run dev | build | test | lint | typecheck`).
+- `npm run dev`: start the game locally
+- `npm run check`: typecheck, lint, format check, unit tests, build, bundle-size budget (run before every push)
+- `npm run e2e`: Playwright smoke test on a phone viewport. In the cloud container use
+  `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run e2e`
+- `npm run format`: auto-format

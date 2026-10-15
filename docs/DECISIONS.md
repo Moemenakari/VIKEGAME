@@ -22,4 +22,6 @@ Every significant decision, with the reason. Status: **✅ Owner-approved** · *
 | D-016 | **Historically accurate troop triangle**: Shieldwall > Berserkers > Archers > Shieldwall, **no cavalry**, plus ships as a second layer | Vikings fought on foot. Ships were their real advantage | 🟡 |
 | D-017 | **Real royal offices** (Stallari, Ármaðr, Stafnasmiðr, Lögsögumaðr, Hirðskáld, Merkismaðr) as the King's ministers; the King is chosen at the **Midsummer Thing** | Heimskringla & Íslendingabók. Covers the owner's King + War/Industry/Construction ministers | 🟡 |
 | D-018 | **Real saga heroes** (Lagertha, Egil, Harald Hardrada, Hervor, Sigurd…) instead of invented ones | Public-domain medieval figures with built-in stories | 🟡 |
+| D-020 | **TypeScript 6.0** (not 7) and exact version pins (`.npmrc save-exact`) | typescript-eslint does not support TS 7 yet; exact pins keep builds reproducible | ✅ (technical) |
+| D-021 | **M1 models are procedural** (built in code): terrain, spruces, longhouses, longship | Zero licence risk, tiny download (≈220 KB gzip total JS), and historically shaped (Trelleborg halls, Oseberg ship). CC0 / Blender assets come later where code is not enough | 🟡 |
 | D-019 | No slavery (thralls) and no horned helmets | Ethics, and historical accuracy | 🟡 |
