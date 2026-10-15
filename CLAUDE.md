@@ -1,23 +1,23 @@
 # CLAUDE.md — working rules for this repo
 
 ## Branch rule (owner's explicit request)
-- Work **only** on branch `moe/vibrant-gauss-pydqu8`. Never create other branches. Keep one open PR from it.
+- One working branch only: `moe/vibrant-gauss-pydqu8`. Never create other branches. Keep one open PR from it.
 
 ## Project
-Jarlheim: a 3D mobile 4X strategy game (Norse setting). Read `docs/GDD.md`,
-`docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and `docs/DECISIONS.md` before changing anything.
+Jarlheim: a free, easy-to-play 3D mobile 4X strategy game set in the real Viking Age.
+Read `docs/GDD.md`, `docs/HISTORY_BIBLE.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`
+and `docs/DECISIONS.md` before changing anything.
 
 ## Non-negotiables
+- **Everything is in English:** UI, docs, code, commits.
+- **History first:** every name, office, festival, hero or creature must trace back to a source in `docs/HISTORY_BIBLE.md`. Write our own text and never paste modern translations.
 - `packages/sim` stays pure: no DOM, no Three.js, no `Date.now()`, no `Math.random()`. Time and RNG are injected.
 - Every player action is a serialisable command. Every new rule gets a Vitest test.
-- Balance numbers live in `packages/sim/src/data`, never inline in systems.
-- No asset from the reference game. Every imported asset must have a verified licence (CC0 preferred) and an entry in `assets/CREDITS.md`.
-- UI strings go through i18n (`ar` + `en`). Use CSS logical properties so RTL works.
-- Record significant decisions in `docs/DECISIONS.md`, and update `docs/ar/OVERVIEW.md` when they affect the owner.
-
-## Communication
-The owner speaks Arabic. Explain plans and creative decisions to them in Arabic.
-Code, commits and docs are in English.
+- Balance numbers and events live in `packages/sim/src/data`, never inline in systems.
+- No asset from the reference game. Every imported asset needs a verified licence (CC0 preferred) and an entry in `assets/CREDITS.md`.
+- **Free and easy:** only free tools and services. Any player action must be reachable in ≤ 3 taps.
+- No real payments until M11 (see `docs/MONETIZATION.md`). Gold is earn-only until then.
+- Record significant decisions in `docs/DECISIONS.md`.
 
 ## Commands
 Added in M1 (`npm run dev | build | test | lint | typecheck`).

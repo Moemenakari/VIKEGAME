@@ -1,19 +1,25 @@
 # Decision Log
 
-Every significant decision, with the reason. Status: **✅ Owner-approved** · **🟡 Proposed by Claude, awaiting owner**.
+Every significant decision, with the reason. Status: **✅ Owner-approved** · **🟡 Proposed, awaiting owner** · **🔄 Changed by owner**.
 
 | ID | Decision | Why | Status |
 |---|---|---|---|
-| D-001 | **Copy mechanics, not assets.** Systems follow the genre reference, but all art, names, characters and UI art are original or CC0 | Mechanics are not copyrightable. Ripped assets risk DMCA takedown of the repo and look bad to employers | ✅ |
-| D-002 | **Norse / Viking setting**, working title *Jarlheim* | Matches the repo name (VIKEGAME), looks clearly different from the reference, and Draugr (Norse undead) fill the "zombie" PvE role | ✅ |
-| D-003 | **TypeScript + Three.js**, React for UI, Vite for build | Playable from a link on any phone (the best way to show a portfolio), skills employers ask for, and fully testable in CI | ✅ |
-| D-004 | **Single-player realm with AI clans first; real online in M10** | Every social system (clans, rallies, duel, throne, ministers) gets built and playable months earlier. Because the sim is pure and command-based, going online later is a transport change, not a rewrite | 🟡 (owner asked for clarification, explained in `docs/ar/OVERVIEW.md` §5) |
-| D-005 | **Pure, deterministic sim package** separate from rendering | Testability, replays, AI uses the same code paths, and the same code can run on a server later | 🟡 |
-| D-006 | **Capacitor** for Android; PWA for install-from-browser | Free, reuses the web build 1:1. iOS needs a Mac and a paid account, so it is deferred | 🟡 |
-| D-007 | **Art pipeline:** CC0 kits (KayKit, Kenney, Quaternius, Poly Pizza CC0) + our own Blender models, glTF + Meshopt + KTX2 | Free, licence-clean, mobile-friendly. Each asset's licence is checked before import and logged in `assets/CREDITS.md` | 🟡 |
-| D-008 | **No real-money purchases**; Runes are earned only, recruitment rates are shown | Avoids payment and loot-box legal complexity, and keeps the portfolio focus on engineering | 🟡 |
-| D-009 | **Arabic + English from day one**, RTL-mirrored HUD | The owner's audience is Arabic-speaking. Building RTL in from the start is much cheaper than retrofitting it | 🟡 |
-| D-010 | **Docs and code in English**; an Arabic overview is maintained for the owner | English is the norm on GitHub and for international recruiters | 🟡 |
-| D-011 | **One branch only:** `moe/vibrant-gauss-pydqu8` | The owner explicitly asked for a single branch controlled by Claude | ✅ |
-| D-012 | **Code licence: MIT** (assets keep their own licences) | Standard for portfolio projects, so employers can read and reuse the code | 🟡 (licence file added only after owner confirms) |
-| D-013 | Portrait orientation, 9:19.5 HUD layout mirroring the reference's grammar | Players of the genre already know this layout | 🟡 |
+| D-001 | **Copy mechanics, not assets.** Systems follow the genre reference, but all art, names, characters and UI art are original or CC0 | Mechanics are not copyrightable. Ripped assets risk DMCA takedown and look bad to employers | ✅ |
+| D-002 | **Norse / Viking setting**, working title *Jarlheim* | Matches the repo name (VIKEGAME) and looks clearly different from the reference | ✅ |
+| D-003 | **TypeScript + Three.js**, React for UI, Vite for build | Playable from a link on any phone, skills employers want, testable in CI | ✅ |
+| D-004 | **AI clans first, real online in M10** | Every social system is playable months earlier. The pure sim makes going online a transport change | 🟡 |
+| D-005 | Pure, deterministic `sim` package separate from rendering | Tests, replays, AI and a future server all share one code path | 🟡 |
+| D-006 | Capacitor for Android, PWA for install-from-browser | Free, and reuses the web build | 🟡 |
+| D-007 | CC0 kits + own Blender models; glTF + Meshopt + KTX2 | Free, licence-clean, mobile-friendly | 🟡 |
+| D-008 | **v1 is 100 % free. Gold (premium) is earn-only now, sellable later** after the server exists and the legal checklist is done | Owner: "if we succeed like Last Z, people should pay for Gold". Payments need a server wallet to be cheat-proof | 🔄 (was "never sell") |
+| D-009 | **English only**: game UI, docs, code. Strings still go in one dictionary | Owner: "all in English" | 🔄 (was AR + EN) |
+| D-010 | **Grounded in real Viking history**: sagas, Heimskringla, Eddas, law codes, archaeology. Sources in HISTORY_BIBLE.md | Owner: "base it on the historical books". It also makes the game stand out | ✅ |
+| D-011 | **One working branch:** `moe/vibrant-gauss-pydqu8`. `main` exists only because GitHub creates it with every repo | Owner asked for a single branch | ✅ (owner may choose to work on `main` instead) |
+| D-012 | Code licence: MIT (assets keep their own licences) | Standard for portfolio projects | 🟡 |
+| D-013 | Portrait, 9:19.5 HUD layout following the reference's grammar | Genre players already know it | 🟡 |
+| D-014 | **Free and easy**: free tools only; ≤ 3 taps to any action, auto-collect, 5-minute tutorial | Owner: "all free and easy" | ✅ |
+| D-015 | **A monster hunt every day** (Thor's Fishing, Fáfnir, Draugr Night, Wolf Hunt, Giant Siege, Hólmganga, Hnefatafl) | Owner: "every day have events, kill fish, kill dragon…" | ✅ |
+| D-016 | **Historically accurate troop triangle**: Shieldwall > Berserkers > Archers > Shieldwall, **no cavalry**, plus ships as a second layer | Vikings fought on foot. Ships were their real advantage | 🟡 |
+| D-017 | **Real royal offices** (Stallari, Ármaðr, Stafnasmiðr, Lögsögumaðr, Hirðskáld, Merkismaðr) as the King's ministers; the King is chosen at the **Midsummer Thing** | Heimskringla & Íslendingabók. Covers the owner's King + War/Industry/Construction ministers | 🟡 |
+| D-018 | **Real saga heroes** (Lagertha, Egil, Harald Hardrada, Hervor, Sigurd…) instead of invented ones | Public-domain medieval figures with built-in stories | 🟡 |
+| D-019 | No slavery (thralls) and no horned helmets | Ethics, and historical accuracy | 🟡 |

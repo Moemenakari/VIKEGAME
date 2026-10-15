@@ -28,7 +28,7 @@ VIKEGAME/
 │  │  └─ test/             # Vitest unit + property tests
 │  └─ client/              # the game app
 │     ├─ src/scene/        # Three.js: renderer, camera rig, hold/, realm/, fx/, assets/
-│     ├─ src/ui/           # React HUD & panels, i18n (ar/en), RTL
+│     ├─ src/ui/           # React HUD & panels (English UI, strings in one dictionary)
 │     ├─ src/store/        # bridges sim state → UI (Zustand)
 │     ├─ src/platform/     # save (IndexedDB), haptics, Capacitor glue
 │     └─ e2e/              # Playwright smoke tests (mobile viewport)
@@ -108,8 +108,8 @@ The CI build fails if the bundle-size budget is exceeded.
 
 ## 8. UI layer
 
-- **React** DOM overlay above the canvas: crisp text, accessibility, and native RTL with `dir="rtl"` and CSS logical properties (`margin-inline-start`…).
-- **i18n:** JSON dictionaries `ar.json` / `en.json`, ICU-style plurals, and Arabic as a first-class language (not an afterthought).
+- **React** DOM overlay above the canvas: crisp text and accessibility.
+- **Language:** the game is **English only**. All UI strings still live in one `en.json` dictionary (no hard-coded text), so another language could be added later.
 - **State:** a Zustand store holds the latest sim snapshot. Components subscribe to small slices so React never re-renders on every frame.
 - **Design system:** a small set of tokens (colours, radii, spacing) + components (Panel, Tabs, ResourcePill, TimerBadge, HeroCard, Button).
 
@@ -123,7 +123,7 @@ The CI build fails if the bundle-size budget is exceeded.
 
 - About 60 bot players in 6–8 AI clans live in the same `GameState`. They use the **same commands** as the human player.
 - They are cheap: bots act in coarse "turns" during `advance()`, using utility scoring (build if idle, gather when full, rally when strong).
-- AI clans take part in Clan Duel scoring, Fjord Clash and the Throne War, and an AI King appoints ministers.
+- AI clans take part in Clan Duel scoring, Fjord Clash, the daily hunts and the Midsummer Thing, and an AI King appoints the royal offices.
 - The point is that every social system is built and tested now, so going online later (M10) is a transport change, not a redesign.
 
 ## 11. Path to real online play (M10)
@@ -131,10 +131,11 @@ The CI build fails if the bundle-size budget is exceeded.
 ```
 client ──commands──▶ server (Node + Colyseus, runs packages/sim) ──state patches──▶ clients
                               │
-                              └──▶ Postgres (Supabase free tier) for accounts, clans, saves
+                              └──▶ Postgres (Supabase free tier) for accounts, clans, saves, Gold wallet ledger
 ```
 The server becomes authoritative: it runs the same sim, owns the clock and RNG,
-and validates commands. Free hosting options are evaluated at M10.
+and validates commands. It also owns the **Gold wallet**, which is required before any
+purchases (see MONETIZATION.md). Free hosting options are evaluated at M10.
 
 ## 12. Mobile packaging
 

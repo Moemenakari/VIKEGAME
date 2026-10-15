@@ -1,281 +1,275 @@
-# Jarlheim — Game Design Document
+# Jarlheim — Game Design Document (v2)
 
-> Working title: **Jarlheim**. *Build your hold. Forge your clan. Claim the High Seat.*
-> Genre: 3D mobile 4X strategy / city-builder (portrait).
-> Status: **M0 — pre-production.** All numbers are first-pass and live in data
-> tables, so they can be tuned without code changes.
+> *"Cattle die, kinsmen die, the self dies the same; but fame never dies for the one who earns it."*
+> — paraphrase of *Hávamál* 76–77
+>
+> **Genre:** 3D mobile 4X strategy / city-builder (portrait), free to play.
+> **World:** the real Viking Age (c. 793–1066) as the sagas tell it, history and legend side by side.
+> Every historical element is sourced in [HISTORY_BIBLE.md](HISTORY_BIBLE.md).
+> Numbers are first-pass and live in data tables.
 
 ---
 
-## 1. Vision
+## 1. Vision & pillars
 
-A free, high-quality 3D strategy game for phones, set in an original Norse world.
-You grow a small fjord settlement into a mighty hold, recruit legendary heroes,
-join a clan, fight the undead **Draugr**, and race other clans for **the High
-Seat**, the throne whose holder rules the whole realm and appoints its ministers.
+You are a settler who has just arrived on a wild shore. You grow a farmstead into a
+jarl's hold, recruit saga heroes, sail the Silver Road from Dublin to Baghdad,
+hunt dragons and sea serpents, and ride to the **Midsummer Thing**. There the
+clan that holds the **Law Rock** crowns its jarl **King of the North**.
 
-**Portfolio goals:** show clean game architecture, real-time 3D on mobile, and
-data-driven design, all playable from a link with no install.
+1. **Easy to play.** One thumb, ≤ 3 taps to any action, auto-collect, a 5-minute tutorial. You never need a spreadsheet.
+2. **Free.** Free to download, free to finish. Everything is earnable by playing (see MONETIZATION.md for the future store).
+3. **A living saga.** Real history, real names, real laws, turned into game mechanics. Players learn something by playing.
+4. **Something every day.** A new monster hunt every day of the week (LIVE_EVENTS.md).
+5. **Together is stronger.** Clans, feasts, feuds, rallies and the Thing are the long-term goal.
 
-### Pillars
-1. **A living diorama.** The hold looks like a hand-crafted toy world: warm light, snow, smoke from chimneys, boats in the fjord.
-2. **Always something to do.** Short sessions (2–5 min) are always rewarding. Timers run while you are away.
-3. **Together is stronger.** Clans, help requests, rallies and the throne war are the long-term goal.
-4. **Fair.** No real-money purchases. Everything is earned by playing.
+## 2. How a game starts: *Landnám* (land-taking)
+Source: *Landnámabók*.
 
-## 2. Setting & tone
+1. **The pillars.** Your ship reaches the coast. You throw your **high-seat pillars** overboard, and the waves carry them to one of three shores (fjord, plain, forest), each with a small production bonus. Your hold is founded where they land. This is a one-tap, cinematic spawn choice.
+2. **Carrying the fire.** Territory expands the historical way: you **circle land carrying fire within one day**. In the game you drag a loop with your finger around nearby tiles. The loop must be finished before a timer runs out, and the timer grows with research. The land inside becomes yours: more building plots and resource tiles. It is easy to learn, and there is nothing else like it in the genre.
 
-The Long Winter has broken the old kingdoms. The dead walk the ice as **Draugr**,
-and the fjords are free land for anyone brave enough to settle them. Each
-**realm** (server) has one **High Seat** at its centre. The clan that holds it
-crowns a **King or Queen of the North**.
+## 3. Currencies & resources (kept to 4 + 2)
 
-Tone: heroic and warm, not grimdark. The palette is sunset gold, pine green,
-ice blue, and ember red for war.
-
-## 3. Resources & currencies
-
-| Resource | Source | Main use |
-|---|---|---|
-| **Food** | Farms, Fishing Docks, gathering | Training troops, healing, upgrades |
-| **Wood** | Lumber Camps, gathering | Construction (all levels) |
-| **Iron** | Iron Mines (unlocks at Great Hall 10), gathering | Higher-tier construction, troops T4+, gear |
-| **Silver** | Mint (passive tax), quests, events | Research, hero level-ups, clan donations |
-| **Runes** ᚱ | Quests, achievements, events, PvE only (**never sold**) | Premium currency: finishing timers, extra builder slot, hero recruitment |
-| **Valor** | Clan activities (help, rallies, duels) | Clan Store |
-| **Glory** | Fjord Clash, throne war | Season store |
-
-**Storage & protection:** the **Storehouse** protects part of each resource from
-plunder. Anything above the safe amount can be raided.
-
-**Offline production:** buildings produce while you are away, up to **8 h**
-(capped, then raised by research). This is computed from timestamps; see
-ARCHITECTURE §4.
-
-## 4. The Hold (city)
-
-Grid-based layout on a fjord peninsula. Slots unlock by Great Hall level and by
-clearing **snowdrifts / ruins** (a small expansion mechanic). Max level per
-building = Great Hall level (Great Hall max **30**).
-
-### 4.1 Building list
-
-| Group | Building | Role |
-|---|---|---|
-| Core | **Great Hall** | Gates every other building's max level; sets builder slots; raises power |
-| Core | **Palisade** | City defence; boosts defending troops |
-| Core | **Watchtower** | Scouting; warns of incoming attacks |
-| Core | **Storehouse** | Protected resources + inventory |
-| Economy | **Farm**, **Fishing Dock** | Food |
-| Economy | **Lumber Camp** | Wood |
-| Economy | **Iron Mine** | Iron |
-| Economy | **Mint** | Silver (passive tax) |
-| Economy | **Market** | Send resources to clanmates (taxed) |
-| Military | **Shield Hall** | Trains *Huscarls* (infantry) |
-| Military | **Stables** | Trains *Riders* (cavalry) |
-| Military | **Archery Range** | Trains *Archers* (ranged) |
-| Military | **Healer's Lodge** | Wounded troops recover here (capacity) |
-| Military | **War Camp** | March slots & march size |
-| Military | **Forge** | Hero gear crafting |
-| Knowledge | **Seer's Hut** | Rune Lore research |
-| Knowledge | **Hall of Valhalla** | Hero collection bonuses ("Hall of Glory") |
-| Social | **Clan Hall** | Clan help count & help strength; clan reinforcements capacity |
-| Social | **Harbor** | Longship voyages (trade runs other players can raid) |
-
-### 4.2 Construction rules
-- **Builders:** 2 at start, a 3rd at Great Hall 5, a 4th at Great Hall 12, plus a **5th** temporary slot bought with Runes (7 days). The video shows `4/5`.
-- **Upgrade cost** at level *L*: `cost(L) = base × growth^(L−1)` (growth ≈ 1.32–1.40 per resource).
-- **Upgrade time:** `time(L) = t0 × 1.45^(L−1)`, soft-capped by data tables at high levels.
-- **Prerequisites:** e.g. Great Hall 8 needs Palisade 7 + Shield Hall 7.
-- **Clan help:** each help cuts the remaining time by `max(1%, 60 s)`. The number of helps is set by the Clan Hall level.
-- **Free finish:** timers with **≤ 5 min** left can be finished instantly for free (genre convention, good for short sessions).
-
-## 5. Military
-
-### 5.1 Troop types: the counter triangle
-```
-Huscarls (infantry)  ─beats→  Riders (cavalry)
-Riders (cavalry)     ─beats→  Archers (ranged)
-Archers (ranged)     ─beats→  Huscarls (infantry)
-```
-Counter bonus: **+20 % damage** dealt to the countered type.
-
-| Stat | Meaning |
-|---|---|
-| ATK / DEF / HP | Combat |
-| Load | Resources carried home |
-| Speed | World-map march speed |
-| Power | Contribution to player Power |
-
-Tiers **T1–T10**, unlocked by building level + research. Each tier costs about
-1.6× the previous one and is about 1.45× stronger. Upkeep: none in v1, to keep it simple.
-
-### 5.2 Combat resolver (deterministic)
-- Up to **10 rounds**. Each round, every stack attacks in priority order: ranged → cavalry → infantry.
-- Damage = `ATK × count × modifiers × counter × (1 − DEF/(DEF+K))`.
-- Hero skills trigger on rounds or conditions (e.g. "round 3: +25 % archer damage").
-- Losses split into **dead / wounded / lightly wounded**. Wounded go to the Healer's Lodge up to its capacity, and the rest die.
-- Seeded RNG gives small variance (±5 %) and makes battle **replays** possible.
-- Output: a **battle report** (summary + round log) stored in Mail.
-
-## 6. Heroes
-
-- **Rarity:** Rare (blue), Epic (purple), Legendary (gold).
-- **Stars:** 0–5 ★, each with 5 sub-steps, raised with **hero shards**.
-- **Level:** 1–100, raised with XP tomes + Silver. Capped by Great Hall level.
-- **Skills:** 1 *Tactic* (combat, active), 1 *Command* (troop-type passive), 1 *Hold* (economy passive, e.g. +build speed when assigned as governor).
-- **Gear:** 4 slots (weapon, armour, helm, charm), crafted at the Forge.
-- **Squads:** a march is led by **up to 3 heroes** (raised to 5 later). Heroes give stats to troops of their affinity type.
-- **Recruitment:** at the Mead Hall with *Recruit Horns* (earned) or Runes. **Drop rates are shown in the game.**
-- **Hall of Valhalla:** each hero at 5★ adds a permanent account-wide bonus, like "joined the Hall of Glory" in the reference.
-
-### Launch roster (original characters)
-| Hero | Rarity | Type | Fantasy |
+| Resource | Historical flavour | Produced by | Used for |
 |---|---|---|---|
-| **Astrid Ironveil** | Legendary | Infantry | Shieldmaiden. Huge DEF, taunts enemies |
-| **Bjorn the Unbroken** | Legendary | Infantry | Berserker. Deals more damage as his troops die |
-| **Sigrun Ravenshot** | Legendary | Ranged | Archer. Round-3 volley with +damage |
-| **Eirik Stormrider** | Legendary | Cavalry | Raider. Faster marches, first-strike |
-| **Ylva the Seer** | Epic | Support | Heals wounded, research-speed governor |
-| **Halvard Skald** | Epic | Support | Song buffs squad ATK |
-| **Torvald Hammerhand** | Epic | Infantry | Smith. Construction-speed governor |
-| **Freydis Wavecaller** | Epic | Cavalry | Longship captain. Voyage bonuses |
-| **Kåre Pinewood** | Rare | Ranged | Hunter. Bonus vs Draugr |
-| **Runa Frostbraid** | Rare | Cavalry | Scout. Gathering speed |
+| **Food** | Barley & stockfish | Farmstead, Fish Racks | Troops, healing, feasts |
+| **Timber** | Oak & pine | Woodcutter's Camp | All building, ships |
+| **Iron** | **Bog iron** smelted from bog ore | Bog-iron Smelter (unlocks at Hall 8) | Weapons, high-level buildings, ship rivets |
+| **Silver** | **Hacksilver** valued by weight, Arab dirhams | Market tax, Silver Road voyages, raids | Research, heroes, clan gifts |
+| **Gold** ★ premium | Gold **arm-rings**: the lord is "the ring-giver" | Free from events, quests and achievements. **Later also sold** (MONETIZATION.md) | Finish timers, hero recruitment, cosmetics, 5th builder |
+| **Fame** (*orðstírr*) | What a Viking lived for | Victories, feasts, runestones, events | Season ranking, Thing votes, titles |
 
-## 7. The Realm (world map)
+**Items:** speed-ups (general / build / rune / train / heal, from 1 min to 24 h), resource crates, hero shards and XP, Saga Horns, peace shields, relocation.
 
-- A square-tile 3D map, **~120 × 120** tiles in v1 (bigger later), made of fjords, forests, mountains and ice.
-- **Rings of danger:** outer ring (levels 1–10) → middle → inner → **the High Seat** at the centre.
-- **Map entities:**
-  - Player holds (yours, clanmates, rivals, AI)
-  - **Resource nodes** (farmland, forest, iron vein, silver cache): gather with marches
-  - **Draugr bands** (PvE levels 1–30): hunt them for loot and hero XP
-  - **Frost Giant** (rally boss): needs a clan rally
-  - **Strongholds:** capturable forts that give clan-wide buffs and territory
-  - **Clan banners:** extend territory, and give gathering + defence bonuses inside it
-- **Marches:** travel time = distance / slowest troop speed × modifiers. Order types: Gather, Attack, Scout, Reinforce, **Rally**, Return.
-- **Rally (the "Alliance Assembly Point"):** a leader blows the **Rally Horn** on a target and picks a muster time (1 / 5 / 10 / 30 min). Clanmates send troops to the leader, then everyone marches together.
-- **Shield:** a peace shield (item or newcomer protection) blocks attacks.
+Auto-collect: production flows straight into storage (no tapping a hundred icons).
+Offline production is capped at 8 h at first, raised by research.
 
-## 8. Rune Lore (research)
+## 4. The Hold
 
-Three trees with prerequisite graphs (node → node, like the reference tech tree):
-1. **Economy:** production %, build speed, storage, gathering speed.
-2. **War:** ATK/DEF/HP per troop type, tier unlocks, healing, march size.
-3. **Seafaring:** march speed, longship voyages, offline cap, scouting.
+Grid layout on the peninsula you claimed. Every building's max level = Great Hall level (max **30**).
 
-Plus **Clan Lore** (shared tree, funded by member donations of Silver).
-
-Research slots: 1 at start, 2nd unlocked by Seer's Hut level (the reference shows `1/2`).
-
-## 9. Items & rewards taxonomy
-
-| Item | Variants |
-|---|---|
-| Speed-ups | General, Build, Research, Train, Heal: 1m, 5m, 15m, 1h, 3h, 8h, 24h |
-| Resource crates | Food/Wood/Iron/Silver: 1K, 10K, 100K |
-| Hero items | Shards (per hero / universal), XP tomes, gear materials |
-| Utility | Peace shield 8h/24h, teleport (random/clan), rename, Recruit Horns |
-| Boosts | +production 25 % / 8h, +gathering, +march size |
-
-## 10. Clans (alliances)
-
-- **Size:** up to 100 members. Ranks: **R5 Jarl**, **R4 Thanes**, **R3 Huscarls**, **R2 Karls**, **R1 Newcomers**.
-- **Features:** help requests, clan gifts (rewards when members complete tasks), Clan Lore, Clan Store (Valor), territory & strongholds, rallies, clan chat, announcements, recruitment settings.
-
-### 10.1 Clan Duel (the reference's "VS")
-Each week a clan is matched with a rival clan of similar power. Each day has a theme, and points come from that theme:
-
-| Day | Theme | Points from |
+| Building | Old Norse | Role |
 |---|---|---|
-| Mon | Gathering | resources gathered |
-| Tue | Building | construction power gained |
-| Wed | Lore | research power gained |
-| Thu | Heroes | hero XP / stars / recruits |
-| Fri | Training | troop power trained |
-| Sat | Raid | enemy troops defeated |
+| **Great Hall** | *skáli* | HQ. The **High Seat** inside sets everything's cap. Hosts **Feasts** (§9.2) |
+| **Ring Fort** | Trelleborg-style | Wall. Defence bonus |
+| **Beacon Cairn** | *viti* | Watchtower. Warns of incoming attacks (Hákon the Good's beacon chain) |
+| **Storehouse** | *útibúr* | Protects resources from raids |
+| **Farmstead** / **Fish Racks** | *bær* / *hjallr* | Food |
+| **Woodcutter's Camp** | | Timber |
+| **Bog-iron Smelter** | | Iron |
+| **Market** | *kaupangr* | Silver tax. Send resources to clanmates |
+| **Shield Yard** | | Trains **Shieldwall** troops |
+| **Bowyer's Range** | | Trains **Archers** (yew bows) |
+| **Wolf-skin Lodge** | *úlfheðnar* | Trains **Berserkers** |
+| **Boathouse & Shipyard** | *naust* | Builds **ships** (§5.2) |
+| **Weaving House** | *dyngja* | Woollen sails: speeds up the Shipyard |
+| **Smithy** | | Hero gear |
+| **Healer's House** | | Wounded troops recover here |
+| **Rune Carver's Hut** | | Research (§7) |
+| **Skald's Hearth** | | Recruit heroes by hearing their sagas (§6) |
+| **Runestone Field** | | Achievements carved in stone, each a permanent bonus (§9.4) |
+| **Thing Mound** | *þing* | Clan centre: helps, clan law, votes |
 
-The clan that wins more days gets the weekly chest. Personal milestones pay out daily too.
+**Builders:** 2 → 3 (Hall 5) → 4 (Hall 12) → +1 temporary (Gold, 7 days).
+**Costs:** `base × growth^(L−1)`. **Times:** `t0 × 1.45^(L−1)`. Finishing is free with ≤ 5 min left. Each clan help takes `max(1 %, 60 s)` off a timer.
 
-### 10.2 Fjord Clash (the reference's "Canyon Clash")
-- Weekly battleground of **20 vs 20** clan members, 60 minutes long.
-- **Phases:** Signup → Matchmaking (countdown) → Battle → Results.
-- Capture and hold shrines on a separate small map. A central relic gives double points. Wounded troops are returned after the match.
-- Rewards: Glory + clan chest.
+## 5. War
 
-## 11. The High Seat: King & Ministers
+### 5.1 Land troops: the historical triangle
+The Vikings fought on foot. Horses carried them to battle, but they did not fight
+from horseback. So instead of the genre's "cavalry", our triangle is:
 
-The most important long-term goal of each realm.
+```
+   SHIELDWALL (skjaldborg)  ──breaks──▶  BERSERKERS     (a wild charge shatters on locked shields)
+   BERSERKERS (úlfheðnar)   ──breaks──▶  ARCHERS        (they run the archers down)
+   ARCHERS (yew bows)       ──breaks──▶  SHIELDWALL     (arrows wear down the slow wall from range)
+```
++20 % damage against the countered type. Tiers T1–T10, from the **Bóndi levy**
+(free farmer with spear and shield) up to **Hirð champions**.
 
-- **Throne War:** every **2 weeks** (configurable) the High Seat opens for a 6-hour contest. Clans attack the fortress at the centre, and the clan holding it at the end wins. The winning clan's **Jarl is crowned King/Queen of the North**.
-- **King's powers:** appoint ministers, give out the realm's **Royal Gifts**, set the realm announcement, and give **titles of shame** to rivals.
+### 5.2 Ships: a second layer of strategy
+From the Skuldelev wrecks and the sagas:
 
-### 11.1 Ministers (buff positions)
-The King appoints ministers. Any player in the realm can **request a minister's
-blessing**, which puts them in a time-slot queue (e.g. 5 min each). While their
-slot is active they get the buff.
-
-| Position | Arabic | Buff to blessed player |
-|---|---|---|
-| **Marshal of War** | وزير الحرب | +10 % troop training speed, +5 % troop ATK |
-| **Master of Industry** | وزير الصناعة | +25 % resource production, +10 % gathering speed |
-| **Master of Works** | وزير البناء | +10 % construction speed |
-| **Lorekeeper** | وزير العلوم | +10 % research speed |
-| **Steward of the Realm** | وزير الداخلية | +10 % healing speed, +5 % march speed |
-
-### 11.2 Titles of shame (debuffs, King-assigned, 1 per target per war)
-| Title | Effect |
+| Ship | Role |
 |---|---|
-| **Oathbreaker** | −10 % troop ATK |
-| **Coward** | −10 % march speed |
-| **Beggar** | −20 % gathering speed |
+| **Snekkja** | Fast raider. Small crew, quick sea marches |
+| **Skeið** | Big warship. Large crew, sea combat bonus |
+| **Knarr** | Cargo ship for Silver Road voyages, carries the most |
+| **Drakkar** (dragon-ship) | Flagship. Rally leaders only. +morale aura, like Olaf's *Long Serpent* |
 
-In **v1 (single-player + AI realm)** the King may be you or an AI clan's Jarl.
-AI kings appoint ministers and answer blessing requests based on their
-relationship with you (friendly / neutral / hostile).
+On the world map, **sea routes are faster than land routes** when you own
+ships. Pathing picks the best route automatically, so it stays easy.
 
-## 12. Progression & Power
+### 5.3 Combat resolver
+Deterministic, up to 10 rounds, in the order archers → berserkers → shieldwall.
+Hero skills trigger by round. Losses split into dead / wounded / lightly wounded,
+and the Healer's House saves the wounded. A seeded RNG (±5 %) makes **battle replays** possible.
+The report reads like a **saga**: an auto-generated short story of the battle,
+written in saga style alongside the numbers ("Then Astrid's shieldwall held, and the berserkers broke upon it…").
 
-- **Power** = building power + research power + troop power + hero power. It is shown everywhere and used for matchmaking.
-- **Great Hall** milestones gate content: GH5 world map unlocks, GH8 clans, GH10 Iron, GH12 4th builder, GH15 rallies lead, GH17 Fjord Clash, GH20 throne war participation, GH25–30 top tiers.
-- **Renown tiers** (the reference's VIP): earned with daily login and quests, never bought. They give small QoL bonuses such as free-finish time and an extra queue.
+## 6. Heroes: real saga figures
+Historical and legendary people from the sagas and chronicles, all long in the
+public domain. Rarity Rare / Epic / Legendary, 0–5 ★, level 1–100, 3 skills, 4 gear slots, **squads of 3**.
+Recruit at the **Skald's Hearth** with *Saga Horns* (earned) or Gold. **Odds are always shown**, with a pity counter.
 
-## 13. Live-ops / events (data-driven)
-Daily quests, a 7-day newcomer journey, Clan Duel, Fjord Clash, Draugr Hunt (weekend), Frost Giant (clan boss), Throne War. Every event is defined as **data**: schedule, scoring rules, reward tables. No code changes are needed to add a new event of an existing type.
+| Hero | Rarity | Troop | Signature skill | Source |
+|---|---|---|---|---|
+| **Lagertha** | Legendary | Shieldwall | *Shield-maiden's Stand*: the wall takes −30 % damage for 2 rounds | Gesta Danorum IX |
+| **Harald Hardrada** | Legendary | Shieldwall | *Varangian Oath*: rally leader, +march size | Heimskringla |
+| **Egil Skallagrímsson** | Legendary | Berserker | *Níðstang*: curses the enemy squad, −ATK | Egils saga |
+| **Hervor** | Legendary | Berserker | *Tyrfing*: huge damage, but each strike costs her own HP | Hervarar saga |
+| **Einar Thambarskelfir** | Legendary | Archer | *The Bow That Broke*: a single devastating shot in round 3 | Heimskringla (Svolder) |
+| **Sigurd Fáfnisbane** | Legendary | Berserker | *Dragon-slayer*: +50 % damage vs **dragons** | Völsunga saga |
+| **Grettir the Strong** | Epic | Shieldwall | *Bane of Glámr*: +40 % damage vs **draugr** | Grettis saga |
+| **Olaf Tryggvason** | Epic | Ships | *Long Serpent*: +sea combat for the flagship | Heimskringla |
+| **Freydís Eiríksdóttir** | Epic | Berserker | *Fearless*: more damage when her squad is losing | Vínland sagas |
+| **Leif Erikson** | Epic | Archer | *Far-sailer*: +voyage speed, finds new lands | Saga of the Greenlanders |
+| **Aud the Deep-Minded** | Epic | Governor | *Land-taker*: +production, bigger fire-carry loop | Landnámabók, Laxdæla |
+| **Gunnhild, Mother of Kings** | Epic | Support | *Seiðr*: slows enemy healing | Heimskringla, Egils saga |
+| **Ahmad ibn Faḍlān** | Rare (special) | Support | *Chronicler of the Rūs*: +research speed, reveals enemy squads when scouting | Risāla (922) |
+| **Thorfinn Karlsefni** | Rare | Archer | *Vínland Settler*: +gathering in far lands | Erik the Red's saga |
+| **Bóndi Ketil** (original) | Rare | Shieldwall | Starter hero, a farmer-soldier who grows with you | — |
 
-## 14. UX & HUD (portrait, 9:19.5)
+**Portrait style:** illustrated, historically dressed (no horned helmets), stylised to match the diorama.
 
-Same layout grammar as the reference. **It mirrors automatically for Arabic (RTL).**
+## 7. Research: the 16 runes
+Research is built on the **16 runes of the Younger Futhark**. Each rune is a small tree
+themed on its traditional meaning from the rune poems. You carve runes at the Rune Carver's Hut.
 
+| Rune | Meaning | Tree |
+|---|---|---|
+| ᚠ **fé** | wealth | Silver & market |
+| ᚢ **úr** | slag / iron ("slag comes from bad iron") | Iron & smithing |
+| ᚦ **þurs** | giant | PvE: giants & monsters |
+| ᚬ **áss** | god / mouth (poetry) | Skalds, fame, heroes |
+| ᚱ **reið** | ride / journey | March speed |
+| ᚴ **kaun** | sore / wound | Healing |
+| ᚼ **hagall** | hail | Siege & wall-breaking |
+| ᚾ **nauðr** | need | Defence when outnumbered |
+| ᛁ **íss** | ice | Winter season bonuses |
+| ᛅ **ár** | good year / harvest | Food |
+| ᛋ **sól** | sun | Summer season bonuses, build speed |
+| ᛏ **Týr** | the war god | Troop attack |
+| ᛒ **björk** | birch (growth) | Construction |
+| ᛘ **maðr** | man | Troop HP & capacity |
+| ᛚ **lögr** | water / sea | Ships & sea routes |
+| ᛦ **ýr** | yew (bows) | Archers |
+
+## 8. The world map: Midgard
+A stylised map of the real Viking world, compressed so all of it fits in one realm (~120 × 120 tiles in v1):
+
+```
+          Grænland      Ísland                 Norðrvegr (Norway)     Garðaríki (Rus)
+ Vínland ·····························  [ LÖGBERG — Law Rock ]  ····· (river route) ····· Miklagarðr
+          Írland/Dyflin   Orkneyjar        Danmörk / Hedeby                         ···· Serkland
+```
+- **Danger rises toward the centre.** The **Lögberg** island in the middle is the throne objective.
+- **Map content:** player holds, resource tiles, **draugr barrows**, troll caves, **ring forts** (clan-capturable strongholds, Trelleborg design), trading towns (Hedeby, Birka, Dyflin, Miklagarðr) and the sea.
+- **Marches:** gather, attack, scout, reinforce, **rally**. Sea or land routing is automatic.
+- **Rally = the War Horn.** The leader sounds the horn and sets a 1, 5, 10 or 30-minute timer. Clanmates join, then everyone sails together.
+
+## 9. Society: clans, feuds, feasts
+
+### 9.1 Clans (*félag*, sworn brotherhoods like the Jomsvikings)
+Up to 100 members. Ranks: **Jarl (R5) · Hersir (R4) · Húskarl (R3) · Karl (R2) · Newcomer (R1)**.
+Each clan writes up to **3 "Jomsviking laws"**, chosen from a list (e.g. "no attacking members' friends", "must join 1 rally a day"). These are shown to applicants, and members who keep them get a small bonus.
+Features: help, ring-gifts, clan research, territory, ring forts, rallies, chat.
+
+### 9.2 Feasts (*veizla*) and ring-giving
+A Jarl or player hosts a **Feast** in the Great Hall by spending Food. Guests who
+join (tap the invite) get a buff for 1 h. The host gains **Fame**, and a **skald**
+NPC composes a 2-line verse about the host, shareable as an image. Clan gifts
+are framed as the Jarl **giving rings**.
+
+### 9.3 Feud & wergild (*Njáls saga*, *Grágás*)
+- If someone attacks you, you get a **Feud** on them for 24 h: +10 % damage against them, and revenge earns double Fame.
+- The attacker can end the feud by paying **wergild** (Silver) to the victim. Both gain a little Fame for honour.
+- Clan Jarls can settle feuds between clans at the Thing Mound. This makes PvP less toxic: you can pay to end a feud.
+
+### 9.4 Runestones (achievements)
+Big deeds are carved on runestones in your **Runestone Field**: "**[YourName] raised this stone to mark the victory over Fáfnir**." Your player name is **transliterated into real Younger Futhark runes**. Each stone gives a permanent account bonus, and you can share the image.
+
+### 9.5 Níðstang (curse pole)
+A rare item (from Egil's saga). Raise it on a rival's border: −5 % production and morale for them for 8 h.
+Limited to 1 per day, and the target can burn it down by sending troops.
+
+## 10. The Midsummer Thing: King & royal offices
+The Althing met every **midsummer** at the **Law Rock**. Our server season (4 weeks) ends with it.
+
+1. **Seizing the Law Rock (6 h):** clans fight to hold the Lögberg island. The clan holding it at the end wins.
+2. **Acclamation:** the winning clan's Jarl is acclaimed **King (or Queen) of the North** until the next Thing.
+3. **The King appoints the royal offices.** These are real offices from Heimskringla and the Icelandic laws. Any player can **request the office's blessing** and get a timed buff from a queue:
+
+| Office (game name) | Historical role | Blessing |
+|---|---|---|
+| **Stallari** — Marshal of War | The king's marshal | +10 % training speed, +5 % troop ATK |
+| **Ármaðr** — Royal Steward (Industry) | Managed the king's estates | +25 % production, +10 % gathering |
+| **Stafnasmiðr** — Master Shipwright (Construction) | Builder of the *Long Serpent* | +10 % build speed, +15 % ship building |
+| **Lögsögumaðr** — Lawspeaker (Knowledge) | Recited the law at the Law Rock | +10 % research speed |
+| **Hirðskáld** — Court Skald | Poet of the king's retinue | +20 % Fame gained |
+| **Merkismaðr** — Standard-bearer | Carried the king's banner | +5 % march speed, +5 % rally size |
+
+4. **Punishments** (the King can give each one to a limited number of players, for the next 3 days):
+
+| Sentence | Historical meaning | Effect |
+|---|---|---|
+| **Níðingr** | The worst insult: a man without honour | −10 % troop ATK |
+| **Lesser Outlawry** (*fjörbaugsgarðr*) | 3-year exile in the old law | −10 % march speed, cannot join rallies |
+| **Full Outlawry** (*skógarmaðr*) | Outside the law | Peace shield disabled. Only for players who broke a server rule voted by the Thing |
+
+## 11. Seasons: summer raiding, winter halls
+The Norse year had two halves. The realm alternates **Summer week ↔ Winter week**:
+- **Summer** (raiding season): sea routes open everywhere, +march speed, the Silver Road pays more.
+- **Winter** (hall season): northern seas freeze (land routes only), +build and research speed, **draugr grow stronger at night**, feasts give double buffs.
+Festivals: **Winter Nights** (season turn), **Yule** (12-day event), **Midsummer Thing** (King). See LIVE_EVENTS.md.
+
+## 12. The Silver Road (trade voyages)
+The genre's truck runs become **knarr voyages** along real routes: Dyflin, Hedeby,
+Birka, Garðaríki, Miklagarðr and **Serkland** (Arab lands, the source of the
+dirhams in Norse hoards). Longer voyages pay more and carry more risk: other
+players can **raid** them, and you can assign clanmates as escorts.
+
+## 13. Daily events & monster hunts
+**Something new to kill every day.** Full calendar in [LIVE_EVENTS.md](LIVE_EVENTS.md). In short:
+Mon **Thor's Fishing** (giant fish & the sea serpent) · Tue **Dragon Hunt** (Fáfnir) · Wed **Draugr Night** ·
+Thu **Wolf Hunt** (Sköll & Hati) · Fri **Giant Siege** (frost giants) · Sat **Hólmganga** (duels) · Sun **Hnefatafl & Feast**.
+
+## 14. Mini-game: Hnefatafl
+The Vikings' real board game (the king escapes to a corner while the attackers try to
+capture him). A daily puzzle gives a small reward, and you can challenge clanmates.
+It is cheap to build (2D board in the UI) and shows real culture.
+
+## 15. Progression & Power
+**Power** = buildings + research + troops + heroes (strength, used for matchmaking).
+**Fame** = season prestige (ranking, Thing). **Hall milestones:** Hall 5 world map, 7 clans, 8 iron, 10 ships, 12 4th builder, 15 lead rallies, 17 Fjord Clash, 20 the Thing, 25–30 top tiers.
+**Hirð rank** (the genre's VIP): earned with daily logins and quests. Gives QoL perks (longer free-finish, an extra queue).
+
+## 16. Clan competitions
+- **Clan Duel (VS)**, weekly matched rival with a daily theme: Mon Gathering · Tue Building · Wed Runes · Thu Heroes · Fri Training · Sat Raiding.
+- **Fjord Clash**, weekly 20 v 20 battleground (60 min): hold shrines and the central relic.
+
+## 17. UX / HUD (portrait)
 ```
 ┌─────────────────────────────────────────┐
-│ [avatar] ⚔Power   🍞 🪵 ⛓ 🪙   ᚱRunes [+] │  top bar
-│ [Renown]                       [Events]  │
-│ [Builders 2/3]                 [Duel VS] │
-│ [Lore 1/1]                     [Sagas]   │  side columns
-│ [Voyages]                      [Clan]    │
-│ [Quests]                       [Mail]    │
-│            ~~~ 3D HOLD ~~~              │
-│ [chat ticker ...............]            │
-│ [Heroes]     [Bag]      [Realm ⇄ Hold]   │  bottom bar
+│ [avatar] ⚔Power  🍞 🪵 ⛓ ⚖Silver   ●Gold [+]│
+│ [Hirð]                      [Today's Hunt]│
+│ [Builders 2/3]                [Duel VS]   │
+│ [Runes 1/1]                   [Sagas]     │
+│ [Voyages]                     [Clan]      │
+│ [Quests]                      [Mail]      │
+│            ~~~ 3D HOLD ~~~                │
+│ [chat ...................]                │
+│ [Heroes]     [Bag]      [Midgard ⇄ Hold]  │
 └─────────────────────────────────────────┘
 ```
+English UI. Tap a building for a radial menu (Upgrade / Info / Speed-up / Help). Recommended next actions glow.
 
-- **One-tap interactions:** tap a building to see a radial menu (Upgrade / Info / Speed-up / Help).
-- Floating timers and badges above buildings, like the reference.
-- Every number is formatted for its locale (`69.2M`, `٦٩٫٢ م` optional), and large values are abbreviated.
-- Haptics on collect and complete (Capacitor).
+## 18. Art & audio
+- **Style:** stylised low-poly "living diorama", historically grounded: turf-roofed longhouses, Oseberg-style carved prows, Gjermundbu helmets, Jelling-style runestones, Urnes-style knotwork on UI frames.
+- **Life:** hearth smoke, the auroras of winter, waves, flags, villagers, sheep.
+- **Assets:** CC0 kits (KayKit, Kenney, Quaternius, Poly Pizza CC0) plus our own Blender models. Each one is listed in `assets/CREDITS.md`.
+- **Audio:** CC0 ambience, drums and horn calls for war, lyre and tagelharpa-style themes.
 
-## 15. Art direction
-- **Style:** stylized low-poly "toy diorama" with soft PBR, mostly vertex colours plus a small texture atlas.
-- **Light:** one warm directional sun with a soft shadow map, a hemisphere fill, a light fog for depth, and snow sparkle.
-- **Life:** chimney smoke (GPU particles), a water shader in the fjord, villagers walking on paths (instanced), flags in the wind.
-- **Sources:** CC0 kits (KayKit, Kenney, Quaternius, Poly Pizza CC0) plus our own models made in Blender. Every asset is listed in `assets/CREDITS.md` with its licence. See DECISIONS D-007.
-
-## 16. Audio
-CC0 / CC-BY music and SFX (each licence checked and credited). Separate volume sliders for music, SFX and ambience. A Nordic ambient theme with drums for war.
-
-## 17. Out of scope for v1
-Real-money purchases, real multiplayer (planned for M10), iOS store release
-(needs a Mac and a paid Apple account), voice chat.
+## 19. Out of scope for v1
+Real payments (planned, see MONETIZATION.md), real-time multiplayer (M10), iOS store, voice chat.
