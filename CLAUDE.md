@@ -1,7 +1,7 @@
 # CLAUDE.md — working rules for this repo
 
 ## Branch rule (owner's explicit request)
-- One working branch only: `moe/vibrant-gauss-pydqu8`. Never create other branches. Keep one open PR from it.
+- **One branch only: `main`.** Commit and push directly to `main`. Never create other branches or pull requests.
 
 ## Project
 Jarlheim: a free, easy-to-play 3D mobile 4X strategy game set in the real Viking Age.

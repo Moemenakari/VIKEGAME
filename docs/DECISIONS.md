@@ -14,7 +14,7 @@ Every significant decision, with the reason. Status: **✅ Owner-approved** · *
 | D-008 | **v1 is 100 % free. Gold (premium) is earn-only now, sellable later** after the server exists and the legal checklist is done | Owner: "if we succeed like Last Z, people should pay for Gold". Payments need a server wallet to be cheat-proof | 🔄 (was "never sell") |
 | D-009 | **English only**: game UI, docs, code. Strings still go in one dictionary | Owner: "all in English" | 🔄 (was AR + EN) |
 | D-010 | **Grounded in real Viking history**: sagas, Heimskringla, Eddas, law codes, archaeology. Sources in HISTORY_BIBLE.md | Owner: "base it on the historical books". It also makes the game stand out | ✅ |
-| D-011 | **One working branch:** `moe/vibrant-gauss-pydqu8`. `main` exists only because GitHub creates it with every repo | Owner asked for a single branch | ✅ (owner may choose to work on `main` instead) |
+| D-011 | **One branch only: `main`.** Commits go straight to `main`, with no feature branches or PRs | Owner: "I want one branch only", then "use main" | ✅ |
 | D-012 | Code licence: MIT (assets keep their own licences) | Standard for portfolio projects | 🟡 |
 | D-013 | Portrait, 9:19.5 HUD layout following the reference's grammar | Genre players already know it | 🟡 |
 | D-014 | **Free and easy**: free tools only; ≤ 3 taps to any action, auto-collect, 5-minute tutorial | Owner: "all free and easy" | ✅ |

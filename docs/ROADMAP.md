@@ -1,7 +1,7 @@
 # Jarlheim — Roadmap
 
 Every milestone ends with something **playable at a public link**. No milestone
-is "just code". Work happens on a single branch (see CLAUDE.md).
+is "just code". All work is committed directly to `main`, the only branch (see CLAUDE.md).
 
 | # | Milestone | Playable result ("demo") | Done when |
 |---|---|---|---|
