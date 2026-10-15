@@ -17,6 +17,7 @@ and `docs/DECISIONS.md` before changing anything.
 - No asset from the reference game. Every imported asset needs a verified licence (CC0 preferred) and an entry in `assets/CREDITS.md`.
 - **Free and easy:** only free tools and services. Any player action must be reachable in ≤ 3 taps.
 - No real payments until M11 (see `docs/MONETIZATION.md`). Gold is earn-only until then.
+- **One trip, not N trips (no N+1):** batch storage reads/writes, network calls, queries and draw calls. Never do I/O or a draw call per item inside a loop. See `docs/ARCHITECTURE.md` §14.
 - Record significant decisions in `docs/DECISIONS.md`.
 
 ## Commands

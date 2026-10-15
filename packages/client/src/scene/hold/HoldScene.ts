@@ -1,22 +1,44 @@
-import type { HoldTerrain } from '@jarlheim/sim';
-import { createRng, nextRange, sampleHeight } from '@jarlheim/sim';
+import type { GameState, HoldTerrain } from '@jarlheim/sim';
+import { HALL_PLOT_ID, PLOTS, hallLevel, sampleHeight } from '@jarlheim/sim';
 import * as THREE from 'three';
 import type { QualitySettings } from '../quality';
 import { SKY, createSky } from '../sky';
 import { createSmoke, createSnow, type Particles } from '../fx/particles';
-import { createBanner, createLonghouse } from './longhouse';
+import {
+  FOOTPRINT,
+  createBuildingModel,
+  createEmptyPlot,
+  createFooting,
+  createScaffold,
+} from './buildingModels';
+import { createBanner } from './longhouse';
 import { createLongship } from './longship';
 import { createForest, createRocks } from './props';
 import { createTerrainMesh } from './terrainMesh';
 import { createWater, type Water } from './water';
 
-/** Things the player can tap. The id is what the UI shows information for. */
-export type PickId = 'great-hall' | 'longship';
+/** Things the player can tap: a plot id (including 'hall') or the longship. */
+export type PickId = string;
+
+interface Slot {
+  id: string;
+  group: THREE.Group;
+  proxy: THREE.Mesh;
+  unlockHall: number;
+  /** What is currently shown, so models are only rebuilt when something changed. */
+  key: string;
+  /** Height above the plot where its label floats. */
+  labelHeight: number;
+}
+
+const PROXY_GEOMETRY = new THREE.BoxGeometry(1, 1, 1);
+const PROXY_MATERIAL = new THREE.MeshBasicMaterial({ visible: false });
 
 /** The player's settlement: terrain, sea, forest, buildings, ship, weather. */
 export class HoldScene {
   readonly scene = new THREE.Scene();
   readonly pickables: Array<{ id: PickId; object: THREE.Object3D }> = [];
+  readonly slots = new Map<string, Slot>();
   readonly sun: THREE.DirectionalLight;
 
   private readonly sky: THREE.Mesh;
@@ -64,38 +86,25 @@ export class HoldScene {
     scene.add(createForest(terrain.trees));
     scene.add(createRocks(terrain.rocks));
 
-    // The Great Hall at the heart of the hold.
-    const hall = createLonghouse({ length: 13, width: 5.2, wallHeight: 2.4, roofHeight: 3.2, shields: true });
-    hall.position.set(terrain.hall.x, terrain.hall.y, terrain.hall.z);
-    hall.rotation.y = 0.12;
-    scene.add(hall);
-    this.addPickable('great-hall', hall, new THREE.Vector3(14, 8, 8));
-
-    // A handful of smaller houses around it, placed with a seeded RNG.
-    const rng = createRng(terrain.seed + 3);
-    const ring = [0.4, 1.5, 2.6, 3.7, 4.8, 5.7];
-    for (const a of ring) {
-      const angle = a + nextRange(rng, -0.25, 0.25);
-      const r = nextRange(rng, 9.6, 11.4);
-      const x = terrain.hall.x + Math.cos(angle) * r;
-      const z = terrain.hall.z + Math.sin(angle) * r;
-      const hut = createLonghouse({
-        length: nextRange(rng, 3.8, 5.2),
-        width: nextRange(rng, 2.4, 3),
-        wallHeight: 1.5,
-        roofHeight: 1.9,
-        shields: false,
-      });
-      hut.position.set(x, sampleHeight(terrain, x, z) - 0.1, z);
-      hut.rotation.y = -angle + Math.PI / 2 + nextRange(rng, -0.2, 0.2);
-      scene.add(hut);
+    // Building plots: the Great Hall and the rings of plots around it.
+    const hallPos = new THREE.Vector3(terrain.hall.x, terrain.hall.y, terrain.hall.z);
+    this.addSlot(HALL_PLOT_ID, hallPos, 0.12, 1);
+    for (const plot of PLOTS) {
+      const x = terrain.hall.x + plot.dx;
+      const z = terrain.hall.z + plot.dz;
+      this.addSlot(
+        plot.id,
+        new THREE.Vector3(x, sampleHeight(terrain, x, z) - 0.05, z),
+        plot.rotation,
+        plot.unlockHall,
+      );
     }
 
     this.banner = createBanner();
     this.banner.group.position.set(terrain.hall.x + 4.5, terrain.hall.y, terrain.hall.z + 5.4);
     scene.add(this.banner.group);
 
-    this.smoke = createSmoke((hall.userData.smokeOrigin as THREE.Vector3).clone().add(hall.position));
+    this.smoke = createSmoke(hallPos.clone().add(new THREE.Vector3(0, 6, 0)));
     scene.add(this.smoke.points);
 
     // The longship at anchor in the fjord.
@@ -127,10 +136,79 @@ export class HoldScene {
     this.pickables.push({ id, object: proxy });
   }
 
+  private addSlot(id: string, position: THREE.Vector3, rotation: number, unlockHall: number): void {
+    const group = new THREE.Group();
+    group.position.copy(position);
+    group.rotation.y = rotation;
+    const proxy = new THREE.Mesh(PROXY_GEOMETRY, PROXY_MATERIAL);
+    proxy.userData.pickId = id;
+    group.add(proxy);
+    this.scene.add(group);
+    this.slots.set(id, { id, group, proxy, unlockHall, key: '', labelHeight: 2 });
+  }
+
+  /** Objects the tap raycast tests: open plots, buildings and the ship. */
+  pickTargets(): THREE.Object3D[] {
+    const targets: THREE.Object3D[] = this.pickables.map((p) => p.object);
+    for (const slot of this.slots.values()) if (slot.key !== 'locked') targets.push(slot.proxy);
+    return targets;
+  }
+
+  /**
+   * Brings the 3D hold in line with the game state. Only plots whose content
+   * changed are rebuilt. Returns true if anything changed.
+   */
+  syncBuildings(state: GameState): boolean {
+    const hall = hallLevel(state);
+    let changed = false;
+    for (const slot of this.slots.values()) {
+      const b = state.buildings[slot.id];
+      const building = state.queue.some((j) => j.buildingId === slot.id);
+      const key = b ? `${b.type}|${b.level}|${building}` : hall >= slot.unlockHall ? 'empty' : 'locked';
+      if (key === slot.key) continue;
+      slot.key = key;
+      changed = true;
+
+      for (const child of [...slot.group.children]) {
+        if (child === slot.proxy) continue;
+        slot.group.remove(child);
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      }
+
+      let radius = 2.8;
+      let height = 2;
+      if (b) {
+        ({ radius, height } = FOOTPRINT[b.type]);
+        slot.group.add(b.level > 0 ? createBuildingModel(b.type, b.level) : createFooting(radius));
+        if (building && b.type !== 'greatHall') slot.group.add(createScaffold(radius, height));
+        if (building && b.type === 'greatHall') {
+          const s = createScaffold(3.5, 5);
+          s.position.x = 7.6;
+          slot.group.add(s);
+        }
+      } else if (key === 'empty') {
+        slot.group.add(createEmptyPlot());
+      }
+      slot.labelHeight = height + 0.6;
+      const hallShape = b?.type === 'greatHall';
+      slot.proxy.scale.set(hallShape ? 14 : radius * 2, height + 1, hallShape ? 8 : radius * 2);
+      slot.proxy.position.y = (height + 1) / 2;
+    }
+    return changed;
+  }
+
   /** World position of a pickable (for UI anchors and tests). */
   anchorOf(id: PickId): THREE.Vector3 {
+    const slot = this.slots.get(id);
+    if (slot) return slot.group.position.clone().add(new THREE.Vector3(0, slot.labelHeight * 0.5, 0));
     const entry = this.pickables.find((p) => p.id === id)!;
     return entry.object.getWorldPosition(new THREE.Vector3());
+  }
+
+  /** Where a plot's floating label sits. */
+  labelAnchor(id: string, target: THREE.Vector3): THREE.Vector3 {
+    const slot = this.slots.get(id)!;
+    return target.copy(slot.group.position).setY(slot.group.position.y + slot.labelHeight);
   }
 
   update(time: number, camera: THREE.Camera, focus: THREE.Vector3): void {

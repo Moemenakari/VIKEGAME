@@ -153,7 +153,25 @@ purchases (see MONETIZATION.md). Free hosting options are evaluated at M10.
 | Playwright | Mobile-viewport smoke test: loads, taps a building, starts an upgrade, takes a screenshot |
 | GitHub Actions | typecheck → lint → test → build → size check → deploy Pages (on `main`) → APK artifact |
 
-## 14. Coding conventions
+## 14. The "one trip" rule (no N+1)
+
+Never do the same small trip N times when one batched trip can do the job. This is
+the classic N+1 problem (100 queries for 100 users instead of one
+`WHERE id IN (...)`), and it applies to every layer of the game:
+
+| Layer | ❌ N trips | ✅ One trip (what we do) |
+|---|---|---|
+| **Save / load** | One storage record per building or resource | The whole `GameState` is one JSON document: one read at start, one write per save (`client/src/game/persistence.ts`) |
+| **Writes** | Save after every tap | Many changes are batched into one debounced write, and flushed when the app is hidden |
+| **Rendering** | One draw call per plank, shield or tree | `ModelBuilder` merges each building into one mesh with one shared material; trees and rocks are `InstancedMesh` (hundreds of objects, one draw call) |
+| **Simulation** | One event per second per building | `advance()` aggregates production into one `resources.produced` event per step |
+| **UI updates** | React re-render per frame for labels | Labels are positioned in one pass inside the render loop; React only updates when the state changes |
+| **Server (M10)** | Fetch each clan member's profile one by one | Fetch all members in one query (`WHERE id IN (...)` / DataLoader-style batching), and send state as one patch per tick |
+
+Code review checklist: if you see a loop that does I/O, a draw call, a network
+request or a database query on each iteration, batch it.
+
+## 15. Coding conventions
 - Sim functions are pure and small. One file per system. Data tables are `as const` + `satisfies` schemas.
 - No magic numbers in systems: they come from `data/`.
 - Every new rule gets a test in `packages/sim/test`.

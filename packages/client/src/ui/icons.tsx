@@ -60,3 +60,16 @@ export const PowerIcon = ({ size = 18 }: IconProps) =>
       <path d="M20 20L8 8 6.5 9.5l12 12zM9 4L4 9l2 2 5-5z" fillOpacity=".7" />
     </g>,
   );
+
+const BY_RESOURCE = {
+  food: FoodIcon,
+  timber: TimberIcon,
+  iron: IronIcon,
+  silver: SilverIcon,
+  gold: GoldIcon,
+} as const;
+
+export const ResourceIcon = ({ res, size = 18 }: { res: keyof typeof BY_RESOURCE; size?: number }) => {
+  const Icon = BY_RESOURCE[res];
+  return <Icon size={size} />;
+};

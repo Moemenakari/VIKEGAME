@@ -52,6 +52,9 @@ so do we. Every historical element in the game should trace back to a row here.
 | **Jelling stones** (Denmark) | Runestone art style for the **Runestone Field** |
 | **Longhouses** (Borg in Lofoten, reconstructed halls) | The **Great Hall** with its high seat, hearth and benches |
 | **Hjallr (stockfish drying racks)**, Lofoten | Fish production building |
+| **Útibúr** (raised storehouses on posts) | The Storehouse model |
+| **Rauðablástr** ("red-blowing": smelting bog ore, *rauði*, in clay shaft furnaces) | The Bog-iron Smelter model and name |
+| Old Norse **skáli** (hall), **bær** (farm), **viðr** (wood), **kaupangr** (market town) | Building names in the game |
 | **Bog-iron smelting sites** | The **Bog-iron Smelter**: Norse iron came from bog ore |
 
 ## 3. Things we deliberately leave out

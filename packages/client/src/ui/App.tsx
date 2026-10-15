@@ -1,52 +1,121 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  BUILDINGS,
+  DAILY_QUESTS,
+  PRODUCED_RESOURCES,
+  RESOURCE_NAMES,
+  builderSlots,
+  storageCap,
+  totalPower,
+  type GameEvent,
+  type GameState,
+} from '@jarlheim/sim';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { GameStore } from '../game/store';
 import { Engine } from '../scene/Engine';
-import type { PickId } from '../scene/hold/HoldScene';
 import { loadQuality, saveQualityAndReload, type QualityTier } from '../scene/quality';
-import { FoodIcon, GoldIcon, IronIcon, PowerIcon, SilverIcon, TimberIcon } from './icons';
-
-/** What the info card says when you tap something. Text is ours; history in docs/HISTORY_BIBLE.md. */
-const INFO: Record<PickId, { title: string; norse: string; body: string; soon: string }> = {
-  'great-hall': {
-    title: 'Great Hall',
-    norse: 'Skáli · Level 1',
-    body: 'The heart of your hold. The High Seat inside sets how far every other building can grow.',
-    soon: 'Upgrades arrive in M2',
-  },
-  longship: {
-    title: 'Snekkja',
-    norse: 'Longship · at anchor',
-    body: 'A fast clinker-built warship, after the Oseberg and Gokstad finds. Sea routes are quicker than land.',
-    soon: 'Silver Road voyages arrive in M6',
-  },
-};
-
-/** Preview numbers until the economy lands in M2. */
-const PREVIEW_RESOURCES = [
-  { key: 'food', icon: <FoodIcon />, value: '5.0K' },
-  { key: 'timber', icon: <TimberIcon />, value: '5.0K' },
-  { key: 'iron', icon: <IronIcon />, value: '—' },
-  { key: 'silver', icon: <SilverIcon />, value: '200' },
-];
+import { formatAmount } from './format';
+import { GoldIcon, PowerIcon, ResourceIcon } from './icons';
+import { PlotPanel } from './PlotPanel';
+import { QuestsPanel, claimableQuests } from './QuestsPanel';
 
 declare global {
   interface Window {
     __jarlheim?: {
       ready: boolean;
       frames: () => number;
-      screenPositionOf: (id: PickId) => { x: number; y: number };
+      screenPositionOf: (id: string) => { x: number; y: number };
+      state: () => GameState;
     };
   }
 }
 
+const realClock = { now: () => Date.now() };
+
+/** Turns simulation events into short messages for the player. */
+function describe(e: GameEvent): string | null {
+  switch (e.type) {
+    case 'building.completed':
+      return e.level === 1
+        ? `${BUILDINGS[e.building].name} is ready`
+        : `${BUILDINGS[e.building].name} reached level ${e.level}`;
+    case 'quest.completed': {
+      const q = DAILY_QUESTS.find((d) => d.id === e.questId);
+      return q ? `Quest done: ${q.title}. Claim your reward!` : null;
+    }
+    case 'quests.reset':
+      return 'New daily quests are here';
+    default:
+      return null;
+  }
+}
+
+function offlineSummary(events: GameEvent[]): string | null {
+  const produced = events.find((e) => e.type === 'resources.produced');
+  if (!produced || produced.type !== 'resources.produced') return null;
+  const parts = PRODUCED_RESOURCES.filter((r) => (produced.amounts[r] ?? 0) >= 1).map(
+    (r) => `+${formatAmount(produced.amounts[r] ?? 0)} ${RESOURCE_NAMES[r]}`,
+  );
+  return parts.length ? `While you were away: ${parts.join(', ')}` : null;
+}
+
 export function App() {
+  const [store, setStore] = useState<GameStore | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    let loaded: GameStore | null = null;
+    GameStore.load(realClock).then(({ store, offline }) => {
+      if (!alive) return;
+      loaded = store;
+      store.start();
+      setStore(store);
+      const summary = offlineSummary(offline);
+      if (summary) setToast(summary);
+    });
+    return () => {
+      alive = false;
+      loaded?.stop();
+    };
+  }, []);
+
+  return store ? <Game store={store} toast={toast} setToast={setToast} /> : <Splash visible />;
+}
+
+function Splash({ visible }: { visible: boolean }) {
+  return (
+    <div className={`splash ${visible ? '' : 'hidden'}`} aria-hidden={!visible}>
+      <div className="logo">JARLHEIM</div>
+      <div className="runes">ᛁᛅᚱᛚᚼᛅᛁᛘ</div>
+    </div>
+  );
+}
+
+function Game({
+  store,
+  toast,
+  setToast,
+}: {
+  store: GameStore;
+  toast: string | null;
+  setToast: (t: string | null) => void;
+}) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<Engine | null>(null);
+  const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [quality] = useState(loadQuality);
   const [ready, setReady] = useState(false);
-  const [selected, setSelected] = useState<PickId | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [panel, setPanel] = useState<'quests' | 'settings' | null>(null);
   const [fps, setFps] = useState(0);
   const [showHelp, setShowHelp] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+
+  const select = useCallback((id: string | null) => {
+    setSelected(id);
+    setPanel(null);
+    engineRef.current?.setSelected(id);
+    setShowHelp(false);
+  }, []);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -54,10 +123,7 @@ export function App() {
     let engine: Engine;
     try {
       engine = new Engine(stage, quality, {
-        onSelect: (id) => {
-          setSelected(id);
-          setShowHelp(false);
-        },
+        onSelect: select,
         onFirstFrame: () => setReady(true),
         onFps: setFps,
       });
@@ -66,30 +132,49 @@ export function App() {
       setToast('Your browser could not start 3D graphics (WebGL).');
       return;
     }
+    engineRef.current = engine;
+    engine.sync(store.snapshot, store.now());
     engine.start();
+    const unsubscribe = store.subscribe(() => engine.sync(store.snapshot, store.now()));
     window.__jarlheim = {
       get ready() {
         return engine.frameCount > 0;
       },
       frames: () => engine.frameCount,
       screenPositionOf: (id) => engine.screenPositionOf(id),
+      state: () => store.snapshot,
     };
-    const hideHelp = setTimeout(() => setShowHelp(false), 7000);
+    const hideHelp = setTimeout(() => setShowHelp(false), 8000);
     return () => {
       clearTimeout(hideHelp);
+      unsubscribe();
       engine.dispose();
+      engineRef.current = null;
       delete window.__jarlheim;
     };
-  }, [quality]);
+  }, [quality, select, setToast, store]);
+
+  // Event messages (one combined toast per step, not one per event).
+  useEffect(
+    () =>
+      store.onEvents((events) => {
+        const lines = events.map(describe).filter((x): x is string => x !== null);
+        if (lines.length) setToast(lines.join(' · '));
+      }),
+    [setToast, store],
+  );
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2200);
+    const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
-  }, [toast]);
+  }, [toast, setToast]);
 
-  const info = selected ? INFO[selected] : null;
-  const soon = (what: string) => () => setToast(`${what} arrive in a later milestone`);
+  const caps = storageCap(state);
+  const busy = state.queue.length;
+  const slots = builderSlots(state);
+  const claimable = claimableQuests(state);
+  const onError = (message: string) => setToast(message);
 
   return (
     <div className="app">
@@ -101,49 +186,102 @@ export function App() {
         </div>
         <div className="power" title="Power">
           <PowerIcon size={16} />
-          <span>1,250</span>
+          <span data-testid="power">{totalPower(state).toLocaleString('en-US')}</span>
         </div>
         <div className="gold" title="Gold (earned by playing)">
           <GoldIcon size={16} />
-          <span>100</span>
+          <span data-testid="gold">{formatAmount(state.resources.gold)}</span>
         </div>
       </header>
       <div className="resources" data-testid="resources">
-        {PREVIEW_RESOURCES.map((r) => (
-          <div className="pill" key={r.key} title={r.key}>
-            {r.icon}
-            <span>{r.value}</span>
-          </div>
-        ))}
+        {PRODUCED_RESOURCES.map((r) => {
+          const full = state.resources[r] >= caps[r];
+          return (
+            <div
+              className={`pill ${full ? 'full' : ''}`}
+              key={r}
+              title={`${RESOURCE_NAMES[r]}: ${Math.floor(state.resources[r])} / ${caps[r]}`}
+            >
+              <ResourceIcon res={r} />
+              <span data-testid={`res-${r}`}>{formatAmount(state.resources[r])}</span>
+            </div>
+          );
+        })}
       </div>
 
-      {info && (
-        <section className="card" data-testid="info-card" role="dialog" aria-label={info.title}>
-          <button className="close" onClick={() => setSelected(null)} aria-label="Close">
+      <aside className="sidebar">
+        <div
+          className={`side-chip ${busy < slots ? 'idle' : ''}`}
+          title="Builders at work"
+          data-testid="builders"
+        >
+          <span className="glyph">⚒</span>
+          {busy}/{slots}
+        </div>
+        <button
+          className="side-chip"
+          onClick={() => {
+            setSelected(null);
+            engineRef.current?.setSelected(null);
+            setPanel(panel === 'quests' ? null : 'quests');
+          }}
+          data-testid="quests-button"
+        >
+          <span className="glyph">ᛟ</span>Quests
+          {claimable > 0 && <span className="badge-dot">{claimable}</span>}
+        </button>
+      </aside>
+
+      {selected && selected !== 'longship' && (
+        <PlotPanel
+          store={store}
+          state={state}
+          plotId={selected}
+          onClose={() => select(null)}
+          onError={onError}
+        />
+      )}
+      {selected === 'longship' && (
+        <section className="card panel" data-testid="info-card" role="dialog" aria-label="Snekkja">
+          <button className="close" onClick={() => select(null)} aria-label="Close">
             ×
           </button>
-          <h2>{info.title}</h2>
-          <p className="norse">{info.norse}</p>
-          <p>{info.body}</p>
-          <p className="soon">{info.soon}</p>
+          <h2>Snekkja</h2>
+          <p className="norse">Longship · at anchor</p>
+          <p>
+            A fast clinker-built warship, after the Oseberg and Gokstad finds. Sea routes are quicker than
+            land.
+          </p>
+          <p className="soon">Silver Road voyages arrive in M6</p>
         </section>
       )}
-
-      {showHelp && ready && (
-        <div className="help">Drag to move · Pinch to zoom · Twist to turn · Tap a building</div>
+      {panel === 'quests' && (
+        <QuestsPanel store={store} state={state} onClose={() => setPanel(null)} onError={onError} />
       )}
-      {toast && <div className="toast">{toast}</div>}
+
+      {showHelp && ready && !selected && !panel && (
+        <div className="help">Drag to move · Pinch to zoom · Tap a plot to build</div>
+      )}
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      )}
 
       <nav className="bottombar">
-        <button onClick={soon('Heroes')}>Heroes</button>
-        <button onClick={soon('Items')}>Bag</button>
-        <button onClick={soon('The world map and voyages')}>Midgard</button>
-        <button className="icon" onClick={() => setSettingsOpen((v) => !v)} aria-label="Settings">
+        <button onClick={() => setToast('Heroes arrive in M4')}>Heroes</button>
+        <button onClick={() => setToast('Items arrive in a later milestone')}>Bag</button>
+        <button onClick={() => setToast('The world map arrives in M6')}>Midgard</button>
+        <button
+          className="icon"
+          onClick={() => setPanel(panel === 'settings' ? null : 'settings')}
+          aria-label="Settings"
+        >
           ⚙
         </button>
       </nav>
 
-      {settingsOpen && (
+      {panel === 'settings' && (
         <section className="settings" data-testid="settings">
           <h3>Graphics</h3>
           <div className="segmented">
@@ -157,15 +295,24 @@ export function App() {
               </button>
             ))}
           </div>
-          <p className="muted">{Math.round(fps)} fps · M1 tech preview</p>
+          <h3 className="spaced">Your hold</h3>
+          <button
+            className="danger"
+            onClick={() => {
+              if (confirm('Start a new hold? Your current progress will be lost.')) {
+                void store.reset();
+                select(null);
+              }
+            }}
+          >
+            Start a new hold
+          </button>
+          <p className="muted">{Math.round(fps)} fps · M2 preview · saved on this device</p>
         </section>
       )}
 
-      <div className={`splash ${ready ? 'hidden' : ''}`} aria-hidden={ready}>
-        <div className="logo">JARLHEIM</div>
-        <div className="runes">ᛁᛅᚱᛚᚼᛅᛁᛘ</div>
-      </div>
-      <div className="badge">M1 · preview</div>
+      <Splash visible={!ready} />
+      <div className="badge">M2 · preview</div>
     </div>
   );
 }

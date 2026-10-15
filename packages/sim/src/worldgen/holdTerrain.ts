@@ -82,9 +82,9 @@ export function generateHoldTerrain(seed: number): HoldTerrain {
       let h = cfg.seabedDepth + (plateau - cfg.seabedDepth) * shore;
       h += mountain * ridged(peaks, u * 2.6, v * 2.6, 5) * cfg.mountainHeight;
 
-      // Level a clearing for the Great Hall.
+      // Level the settlement ground around the Great Hall (on land only, never filling the sea).
       const dh = Math.hypot(x - hallX, z - hallZ);
-      const clear = 1 - smoothstep(cfg.hallClearingRadius * 0.6, cfg.hallClearingRadius, dh);
+      const clear = (1 - smoothstep(cfg.hallClearingRadius * 0.75, cfg.hallClearingRadius, dh)) * shore;
       h = h * (1 - clear) + cfg.plateauHeight * clear;
 
       heights[row * res + col] = h;

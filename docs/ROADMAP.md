@@ -7,7 +7,7 @@ is "just code". All work is committed directly to `main`, the only branch (see C
 |---|---|---|---|
 | **M0** ✅ | **Foundations** | — | GDD, architecture, roadmap and decisions are approved by the owner |
 | **M1** ✅ | Tech skeleton | A 3D snowy fjord peninsula you can pan / pinch-zoom on a phone, at a GitHub Pages URL | Monorepo, Vite, Three.js scene, camera rig, quality tiers, CI (typecheck/lint/test/build), Pages deploy, bundle budget |
-| **M2** | The Hold | Place & upgrade buildings, resources tick, builder queue, timers, offline progress, save/load | `sim`: economy + construction + time + save migrations, with tests. Client: HUD, building menu, floating timers, daily quests |
+| **M2** ✅ | The Hold | Place & upgrade buildings, resources tick, builder queue, timers, offline progress, save/load | `sim`: economy + construction + time + save migrations, with tests. Client: HUD, building menu, floating timers, daily quests |
 | **M3** | Military | Train 3 troop types, heal wounded, fight a test battle with a report | Combat resolver (deterministic), training/healing queues, battle report UI |
 | **M4** | Heroes | Recruit saga heroes, level, star-up, equip; squads of 3; Thor's Fishing (solo) | Hero data + skills, hero screens with 3D hero viewer, fishing mini-game |
 | **M5** | The 16 Runes | Research trees with a graph UI, runestones, Hnefatafl puzzle | Research system + node-graph panel, runestone transliteration |

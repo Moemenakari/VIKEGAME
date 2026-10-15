@@ -24,4 +24,6 @@ Every significant decision, with the reason. Status: **✅ Owner-approved** · *
 | D-018 | **Real saga heroes** (Lagertha, Egil, Harald Hardrada, Hervor, Sigurd…) instead of invented ones | Public-domain medieval figures with built-in stories | 🟡 |
 | D-020 | **TypeScript 6.0** (not 7) and exact version pins (`.npmrc save-exact`) | typescript-eslint does not support TS 7 yet; exact pins keep builds reproducible | ✅ (technical) |
 | D-021 | **M1 models are procedural** (built in code): terrain, spruces, longhouses, longship | Zero licence risk, tiny download (≈220 KB gzip total JS), and historically shaped (Trelleborg halls, Oseberg ship). CC0 / Blender assets come later where code is not enough | 🟡 |
+| D-022 | **The "one trip" rule (no N+1)**: one save record, batched writes, one draw call per building, aggregated events, batched server queries. See ARCHITECTURE §14 | Owner's request, after a video on the N+1 problem (`SELECT … WHERE id IN (…)` instead of 100 queries) | ✅ |
+| D-023 | Buildings are capped at the Great Hall level, and Great Hall 3+ needs the Storehouse at one level below | The genre's core gate. It teaches that the Storehouse matters | 🟡 |
 | D-019 | No slavery (thralls) and no horned helmets | Ethics, and historical accuracy | 🟡 |

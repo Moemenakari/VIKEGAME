@@ -11,11 +11,11 @@ crowned King of the North.
 > **Challenge #10:** a full 4X mobile strategy game, designed and engineered with **Claude Code**,
 > using only free and open-source tools.
 
-**Status:** 🏔️ **M1: Tech skeleton.** A 3D snowy fjord hold you can explore on your phone.
+**Status:** 🏠 **M2: The Hold.** Build and upgrade a Viking settlement: farms, fish racks, woodcutters, a raised storehouse, a market and a bog-iron smelter. Timers, production while you are away, daily quests, and saving on your device.
 
 ### ▶️ Play the preview: **https://moemenakari.github.io/VIKEGAME/**
 
-![Jarlheim M1 — the hold, the fjord and the longship](docs/screenshots/m1-hold.jpg)
+![Jarlheim M2 — the hold, the build menu, construction and daily quests](docs/screenshots/m2-hold.jpg)
 
 ---
 

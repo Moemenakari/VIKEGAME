@@ -1,4 +1,4 @@
-import { generateHoldTerrain } from '@jarlheim/sim';
+import { BUILDINGS, generateHoldTerrain, hallLevel, type GameState } from '@jarlheim/sim';
 import * as THREE from 'three';
 import { CameraRig } from './CameraRig';
 import { HoldScene, type PickId } from './hold/HoldScene';
@@ -35,6 +35,10 @@ export class Engine {
   private firstFrameSent = false;
   private raycaster = new THREE.Raycaster();
   private resizeObserver: ResizeObserver;
+  private labelsRoot: HTMLDivElement;
+  private labels = new Map<string, { el: HTMLDivElement; text: HTMLSpanElement; bar: HTMLDivElement }>();
+  private selected: string | null = null;
+  private readonly tmp = new THREE.Vector3();
 
   constructor(
     private readonly container: HTMLElement,
@@ -73,6 +77,22 @@ export class Engine {
     });
     this.rig.focus(terrain.hall.x, terrain.hall.y, terrain.hall.z + 6);
 
+    // Floating labels above plots (names, levels, timers). Plain DOM, positioned each frame.
+    this.labelsRoot = document.createElement('div');
+    this.labelsRoot.className = 'labels';
+    container.appendChild(this.labelsRoot);
+    for (const id of this.hold.slots.keys()) {
+      const el = document.createElement('div');
+      el.className = 'plot-label';
+      const text = document.createElement('span');
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.appendChild(document.createElement('i'));
+      el.append(text, bar);
+      this.labelsRoot.appendChild(el);
+      this.labels.set(id, { el, text, bar });
+    }
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
@@ -90,12 +110,50 @@ export class Engine {
     this.resizeObserver.disconnect();
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.rig.dispose();
+    this.labelsRoot.remove();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
 
   get frameCount(): number {
     return this.frames;
+  }
+
+  /**
+   * Shows the game state: rebuilds plots whose building changed and refreshes the
+   * label texts and timer bars. Called on every state change and once a second.
+   */
+  sync(state: GameState, now: number): void {
+    if (this.hold.syncBuildings(state)) {
+      this.renderer.shadowMap.needsUpdate = true;
+      this.lastInput = performance.now();
+    }
+    const hall = hallLevel(state);
+    for (const [id, label] of this.labels) {
+      const b = state.buildings[id];
+      const job = state.queue.find((j) => j.buildingId === id);
+      const slot = this.hold.slots.get(id)!;
+      let text = '';
+      if (b) text = b.level > 0 ? `${BUILDINGS[b.type].name} · ${b.level}` : BUILDINGS[b.type].name;
+      else if (hall >= slot.unlockHall) text = '+ Build';
+      label.text.textContent = text;
+      label.el.dataset.kind = b ? 'building' : text ? 'empty' : 'locked';
+      label.el.classList.toggle('selected', id === this.selected);
+      if (job) {
+        const total = job.endsAt - job.startedAt;
+        const left = Math.max(0, job.endsAt - now);
+        label.bar.style.display = 'block';
+        (label.bar.firstChild as HTMLElement).style.width = `${(100 * (1 - left / total)).toFixed(1)}%`;
+        label.bar.dataset.time = formatShort(left);
+      } else {
+        label.bar.style.display = 'none';
+      }
+    }
+  }
+
+  setSelected(id: string | null): void {
+    this.selected = id;
+    for (const [lid, label] of this.labels) label.el.classList.toggle('selected', lid === id);
   }
 
   /** Screen position (CSS pixels) of a pickable, used by tests and UI anchors. */
@@ -135,6 +193,7 @@ export class Engine {
 
     this.hold.update(this.time, this.rig.camera, this.rig.focusPoint);
     this.renderer.render(this.hold.scene, this.rig.camera);
+    this.placeLabels();
     this.sinceRender = 0;
     this.frames++;
 
@@ -149,6 +208,20 @@ export class Engine {
     }
   };
 
+  /** Moves each label to its plot's projected screen position (one pass, no layout reads). */
+  private placeLabels(): void {
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    for (const [id, label] of this.labels) {
+      const p = this.hold.labelAnchor(id, this.tmp).project(this.rig.camera);
+      const visible = p.z < 1 && Math.abs(p.x) < 1.2 && Math.abs(p.y) < 1.2;
+      label.el.style.visibility = visible ? '' : 'hidden';
+      if (visible) {
+        label.el.style.transform = `translate(${((p.x + 1) / 2) * w}px, ${((1 - p.y) / 2) * h}px) translate(-50%, -100%)`;
+      }
+    }
+  }
+
   private pick(clientX: number, clientY: number): void {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
@@ -156,11 +229,19 @@ export class Engine {
       -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.rig.camera);
-    const hits = this.raycaster.intersectObjects(
-      this.hold.pickables.map((p) => p.object),
-      false,
-    );
+    const hits = this.raycaster.intersectObjects(this.hold.pickTargets(), false);
     const id = (hits[0]?.object.userData.pickId as PickId | undefined) ?? null;
     this.callbacks.onSelect(id);
   }
+}
+
+/** "1h 05m", "4m 12s", "12s". */
+export function formatShort(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m ${String(sec).padStart(2, '0')}s`;
+  return `${sec}s`;
 }
