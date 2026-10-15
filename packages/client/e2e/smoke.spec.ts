@@ -194,3 +194,29 @@ test('a palisade, and raiders called by the beacon sail in', async ({ page }) =>
   expect((await state()).raid.incoming).not.toBeNull();
   expect(errors).toEqual([]);
 });
+
+test('the globe opens Midgard: realms, alliances, the King and the wars', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?quality=low');
+  await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
+
+  await page.getByTestId('globe').click();
+  await expect(page.getByTestId('world-map')).toBeVisible();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'test-results/world.png' });
+  await page.getByTestId('alliances-button').click();
+  await page.getByTestId('join-VAR').click();
+  expect(await page.evaluate(() => window.__jarlheim!.state().world.alliance)).toBe(2);
+  await page.screenshot({ path: 'test-results/alliances.png' });
+  await page.getByTestId('events-button').click();
+  await expect(page.getByTestId('events')).toContainText("King's War");
+  await page.screenshot({ path: 'test-results/events.png' });
+  await page.getByLabel('Close').click();
+  await page.getByTestId('realm-2').click();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: 'test-results/realm2.png' });
+  await page.getByTestId('world-home').click();
+  await expect(page.getByTestId('world-map')).toBeHidden();
+  expect(errors).toEqual([]);
+});

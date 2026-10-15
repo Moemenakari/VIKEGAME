@@ -48,6 +48,7 @@ import {
   SagaIcon,
 } from './icons';
 import { PlotPanel } from './PlotPanel';
+import { WorldMap } from './WorldMap';
 import { QuestsPanel, Reward, claimableQuests } from './QuestsPanel';
 import { ArmyPanel, BarrowPanel, ReportView, ReportsPanel } from './military';
 
@@ -64,7 +65,8 @@ declare global {
 
 const realClock = { now: () => Date.now() };
 
-type Panel = 'quests' | 'settings' | 'army' | 'barrow' | 'reports' | 'builders' | 'profile' | 'build' | null;
+type Panel =
+  'quests' | 'settings' | 'army' | 'barrow' | 'reports' | 'builders' | 'profile' | 'build' | 'world' | null;
 
 /** A building being placed (new) or moved (moveId), at a spot measured from the hall. */
 interface Placing {
@@ -526,6 +528,18 @@ function Game({
       {panel === 'reports' && (
         <ReportsPanel state={state} onOpen={openReport} onClose={() => setPanel(null)} />
       )}
+      {panel === 'world' && (
+        <WorldMap
+          store={store}
+          state={state}
+          onClose={() => setPanel(null)}
+          onError={onError}
+          onReport={(id) => {
+            setReportId(id);
+            store.dispatch({ type: 'readReport', reportId: id });
+          }}
+        />
+      )}
       {report && <ReportView report={report} onClose={() => setReportId(null)} />}
       {panel === 'quests' && (
         <QuestsPanel
@@ -639,7 +653,12 @@ function Game({
         >
           <GearIcon size={24} />
         </button>
-        <button className="globe" onClick={() => setToast(t('worldSoon'))} aria-label={t('world')}>
+        <button
+          className="globe"
+          onClick={() => openPanel('world')}
+          aria-label={t('world')}
+          data-testid="globe"
+        >
           <GlobeIcon size={40} />
         </button>
       </nav>

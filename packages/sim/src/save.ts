@@ -1,6 +1,14 @@
 import { BUILDING_TYPES } from './data/buildings';
 import { RESOURCES } from './data/resources';
-import { STATE_VERSION, emptyMilitary, freshProfile, freshRaids, plotSpot, type GameState } from './state';
+import {
+  STATE_VERSION,
+  emptyMilitary,
+  freshProfile,
+  freshRaids,
+  freshWorld,
+  plotSpot,
+  type GameState,
+} from './state';
 
 /**
  * Save format: the WHOLE game in one JSON document, written and read in one trip
@@ -28,6 +36,8 @@ const migrations: Record<number, (state: Record<string, unknown>) => Record<stri
       buildings[id] = { ...plotSpot(id), ...b };
     return { ...freshRaids(), ...state, buildings };
   },
+  // v4 → v5: a place on the world map.
+  4: (state) => ({ ...freshWorld(), ...state }),
 };
 
 export function serialize(state: GameState): string {
@@ -83,6 +93,8 @@ function isGameState(s: unknown): s is GameState {
   if (!Array.isArray(q.chests)) return false;
   const p = s.profile;
   if (!isObj(p) || typeof p.name !== 'string' || !isNum(p.avatar) || !Array.isArray(p.owned)) return false;
+  const w = s.world;
+  if (!isObj(w) || !isNum(w.realm) || !isObj(w.home) || !Array.isArray(w.owned)) return false;
   const raid = s.raid;
   if (!isObj(raid) || !isNum(raid.count) || !(raid.nextAt === null || isNum(raid.nextAt))) return false;
   return (

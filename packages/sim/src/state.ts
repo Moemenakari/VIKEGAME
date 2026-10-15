@@ -1,6 +1,7 @@
 import type { BuildingType } from './data/buildings';
 import { ECONOMY } from './data/economy';
 import { HALL_PLOT_ID, PLOTS } from './data/plots';
+import { realmMap } from './systems/world';
 import type { Cost, Resources } from './data/resources';
 import type { UnitType } from './data/troops';
 
@@ -52,7 +53,7 @@ export interface ReportLine {
 export interface BattleReport {
   id: number;
   at: number;
-  kind: 'draugr' | 'raid';
+  kind: 'draugr' | 'raid' | 'conquest';
   /** Barrow level, or the raid number. */
   level: number;
   title: string;
@@ -138,9 +139,18 @@ export interface GameState {
   /** Next id for a new building ("b1", "b2"...). */
   nextBuildingId: number;
   raid: RaidState;
+  /** Your place in Midgard: realm (server), hold tile, conquered land and alliance. */
+  world: {
+    realm: number;
+    home: { x: number; y: number };
+    /** Conquered tiles as "x,y". */
+    owned: string[];
+    /** Index into ALLIANCES, or null. */
+    alliance: number | null;
+  };
 }
 
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
@@ -162,7 +172,13 @@ export function newGame(seed: number, now: number): GameState {
     ...emptyMilitary(seed),
     ...freshProfile(),
     ...freshRaids(),
+    ...freshWorld(),
   };
+}
+
+/** Fields added in save version 5: the world map. Realm 1 until accounts choose one. */
+export function freshWorld(realm = 1): Pick<GameState, 'world'> {
+  return { world: { realm, home: realmMap(realm).home, owned: [], alliance: null } };
 }
 
 /** Where the old fixed plots were: used for the starting buildings and to upgrade old saves. */

@@ -10,6 +10,7 @@ import {
 import { HALL_PLOT_ID } from '../data/plots';
 import type { GameState } from '../state';
 import { troopPower } from './military';
+import { territoryYield } from './world';
 
 /** Rounds costs to friendly numbers: 10s below 1,000, 50s below 10,000, then 100s. */
 function niceRound(n: number): number {
@@ -82,8 +83,9 @@ export function productionPerHour(state: GameState): Record<ProducedResourceId, 
     const p = BUILDINGS[b.type].produces;
     if (p && b.level > 0) rates[p.resource] += p.perHour * p.growth ** (b.level - 1);
   }
+  const land = territoryYield(state);
   const boost = 1 + researchBonus(state);
-  for (const r of PRODUCED_RESOURCES) rates[r] *= boost;
+  for (const r of PRODUCED_RESOURCES) rates[r] = (rates[r] + land[r]) * boost;
   return rates;
 }
 

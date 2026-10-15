@@ -24,3 +24,4 @@ export * from './systems/placement';
 export * from './data/raids';
 export * from './systems/raids';
 export * from './data/world';
+export * from './systems/world';

@@ -3,6 +3,9 @@ import { ECONOMY } from './data/economy';
 import { HALL_PLOT_ID } from './data/plots';
 import { placementError } from './systems/placement';
 import { advanceRaids, callPracticeRaid } from './systems/raids';
+import { ALLIANCES, WORLD } from './data/world';
+import { bordersHold, realmMap, tileAt, tileGarrison, tileKey, tileLimit, tileOwner } from './systems/world';
+import type { Cost } from './data/resources';
 import { DAILY_QUESTS } from './data/quests';
 import { AVATARS, DAILY_CHESTS, MAIN_QUESTS } from './data/mainQuests';
 import { activityPoints, mainGoalDone } from './systems/goals';
@@ -45,6 +48,8 @@ export type Command =
   | { type: 'build'; building: BuildingType; x: number; z: number; rot?: number }
   | { type: 'move'; buildingId: string; x: number; z: number; rot?: number }
   | { type: 'callRaid' }
+  | { type: 'joinAlliance'; alliance: number | null }
+  | { type: 'conquerTile'; x: number; y: number; troops: Record<string, number> }
   | { type: 'upgrade'; buildingId: string }
   | { type: 'finishFree'; buildingId: string; queue?: TimerKind }
   | { type: 'finishWithGold'; buildingId: string; queue?: TimerKind }
@@ -270,6 +275,103 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     b.x = cmd.x;
     b.z = cmd.z;
     if (cmd.rot !== undefined) b.rot = cmd.rot;
+    return null;
+  },
+
+  joinAlliance(state, cmd) {
+    if (cmd.alliance !== null && !ALLIANCES[cmd.alliance]) return fail('UNKNOWN', 'No such alliance');
+    state.world.alliance = cmd.alliance;
+    return null;
+  },
+
+  conquerTile(state, cmd, now, events) {
+    const map = realmMap(state.world.realm);
+    const tile = tileAt(map, cmd.x, cmd.y);
+    if (!tile || tile.kind === 'sea') return fail('UNKNOWN', 'You cannot march there');
+    if (tile.kind === 'capital') return fail('LOCKED', "The Law Rock is won only in the King's War");
+    if (tile.kind === 'fort') return fail('LOCKED', 'A ring fort falls only to a whole alliance');
+    const owner = tileOwner(state, tile);
+    if (owner === -1) return fail('OCCUPIED', 'This land is already yours');
+    if (owner !== null && owner === state.world.alliance)
+      return fail('LOCKED', 'This land belongs to your alliance');
+    if (!bordersHold(state, tile.x, tile.y)) return fail('LOCKED', 'You can only take land next to your own');
+    if (state.world.owned.length + 1 >= tileLimit(hallLevel(state)))
+      return fail('LIMIT', 'Upgrade the Great Hall to hold more land');
+    const sent: Record<string, number> = {};
+    for (const [id, n] of Object.entries(cmd.troops)) {
+      const count = Math.floor(n);
+      if (count <= 0) continue;
+      if (!TROOPS[id] || TROOPS[id].type === 'ship' || (state.army.troops[id] ?? 0) < count)
+        return fail('NOT_ENOUGH', 'Not enough troops at home');
+      sent[id] = count;
+    }
+    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send');
+
+    const rng = createRng(state.rngState);
+    const garrison = tileGarrison(tile, owner);
+    const attackers: Combatant[] = Object.entries(sent).map(([id, count]) => {
+      const t = TROOPS[id]!;
+      return { key: id, name: t.name, type: t.type, count, atk: t.atk, def: t.def, hp: t.hp };
+    });
+    const outcome = resolveBattle(attackers, garrison, rng);
+    let room = Math.max(
+      0,
+      woundedCapacity(state) - sumCounts(state.army.wounded) - sumCounts(state.healing?.troops ?? {}),
+    );
+    const attackerLines: ReportLine[] = [];
+    for (const s of outcome.attacker) {
+      const fallen = s.start - s.alive;
+      const hurt = Math.min(room, Math.floor(fallen * MILITARY.woundedShare));
+      room -= hurt;
+      addCounts(state.army.troops, { [s.key]: fallen }, -1);
+      if (hurt > 0) addCounts(state.army.wounded, { [s.key]: hurt });
+      attackerLines.push({
+        unit: s.key,
+        name: s.name,
+        type: s.type,
+        start: s.start,
+        dead: fallen - hurt,
+        wounded: hurt,
+      });
+    }
+    const reward: Cost = {};
+    if (outcome.attackerWon) {
+      state.world.owned.push(tileKey(tile.x, tile.y));
+      for (const [r, v] of Object.entries(WORLD.conquestReward)) reward[r as keyof Cost] = v * tile.level;
+      grant(state.resources, reward);
+    }
+    const where = `${tile.region} (${tile.x}, ${tile.y})`;
+    const report: BattleReport = {
+      id: state.nextReportId++,
+      at: now,
+      kind: 'conquest',
+      level: tile.level,
+      title: `${outcome.attackerWon ? 'Land taken' : 'Driven back'} · ${where}`,
+      won: outcome.attackerWon,
+      rounds: outcome.rounds,
+      attacker: attackerLines,
+      defender: outcome.defender.map((s) => ({
+        unit: s.key,
+        name: s.name,
+        type: s.type,
+        start: s.start,
+        dead: s.start - s.alive,
+        wounded: 0,
+      })),
+      saga: [
+        owner === null
+          ? `Your warriors marched on free land in ${tile.region}, where the local karls stood to meet them.`
+          : `Your warriors marched on land held by the ${ALLIANCES[owner]!.name} in ${tile.region}.`,
+        outcome.attackerWon
+          ? 'When the fighting was done, your banner stood on the hill, and the land was yours.'
+          : 'The defenders held, and your warriors fell back to the hold.',
+      ],
+      reward,
+      read: false,
+    };
+    state.rngState = rng.state;
+    state.reports = [report, ...state.reports].slice(0, MILITARY.maxReports);
+    events.push({ type: 'battle.resolved', reportId: report.id, won: report.won, level: tile.level });
     return null;
   },
 
