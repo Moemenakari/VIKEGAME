@@ -269,10 +269,81 @@ It is cheap to build (2D board in the UI) and shows real culture.
 English UI. Tap a building for a radial menu (Upgrade / Info / Speed-up / Help). Recommended next actions glow.
 
 ## 18. Art & audio
-- **Style:** stylised low-poly "living diorama", historically grounded: turf-roofed longhouses, Oseberg-style carved prows, Gjermundbu helmets, Jelling-style runestones, Urnes-style knotwork on UI frames.
-- **Life:** hearth smoke, the auroras of winter, waves, flags, villagers, sheep.
-- **Assets:** CC0 kits (KayKit, Kenney, Quaternius, Poly Pizza CC0) plus our own Blender models. Each one is listed in `assets/CREDITS.md`.
-- **Audio:** CC0 ambience, drums and horn calls for war, lyre and tagelharpa-style themes.
 
-## 19. Out of scope for v1
+### 18.1 Style
+Stylised but **detailed** 3D, historically grounded: turf-roofed longhouses with visible
+timber framing, Oseberg-style carved prows, Gjermundbu helmets, Jelling-style runestones,
+Urnes-style knotwork on UI frames. Life everywhere: hearth smoke, winter auroras, waves,
+flags, villagers at work, sheep and horses.
+
+### 18.2 Visual quality plan (owner feedback after M3: "more detail, not just colours")
+M1–M3 used flat colours on procedural shapes to prove the systems. The next art pass
+replaces that with real materials and detail:
+
+| Area | Now (M1–M3) | Upgrade |
+|---|---|---|
+| **Materials** | One flat colour per part | CC0 PBR textures (ambientCG, Poly Haven): wood planks, logs, turf, thatch, stone, snow, wool, iron. Colour + normal + roughness maps, compressed to KTX2 for phones |
+| **Lighting** | Sun + sky colour | CC0 HDRI sky (Poly Haven) for soft ambient light and reflections, warmer sun, contact shadows |
+| **Post-processing** | None | Ambient occlusion (SSAO), soft bloom on fires and runes, colour grading, light vignette. Off on Low quality |
+| **Buildings** | Boxes and prisms | Timber frames, planks, beams, carved gable dragons, doors with iron fittings, chimney smoke holes, props around each building (barrels, carts, woodpiles). Each level adds visible detail |
+| **Life** | Snow and smoke | Villagers walking and working, animals, birds, fire flicker, rippling banners, a moving ship, auroras at night |
+| **Terrain** | Faceted colours | Texture blending (snow / grass / rock / sand), footpaths between buildings, tracks in the snow |
+| **UI** | Text and simple icons | Illustrated icons, carved wood and iron frames, hero portraits, resource art |
+
+Every asset keeps the licence rule: CC0 preferred, each one listed in `assets/CREDITS.md`.
+Performance budgets (ARCHITECTURE §7) still apply. Phones get the textured look at Medium/High,
+and Low keeps the light version.
+
+### 18.3 Audio
+CC0 ambience, drums and horn calls for war, lyre and tagelharpa-style themes.
+
+## 19. Communication & social (owner request after M3)
+
+A strategy game lives in its chat. Players must be able to talk to everyone:
+
+### 19.1 Channels
+| Channel | Who | Notes |
+|---|---|---|
+| **Realm chat** | Everyone on the server | Slow mode (one message every few seconds), posting unlocks at Great Hall 5 to stop spam bots |
+| **Clan chat** | Clan members | Pinned announcements by Jarl/Hersir. Rallies, help requests and attacks on members are posted automatically |
+| **Private messages** | Two players | Friends or anyone who has not blocked you |
+| **Group chats** | Up to N players you invite | Create, name, invite, leave, kick (owner). Group size grows with VIP |
+| **System** | The game | Battle reports, event notices |
+
+### 19.2 Friends
+Send, accept and decline friend requests, see who is online, block and unblock, and visit a friend's hold.
+
+### 19.3 What a message can hold
+- Text with Norse-themed **emotes and stickers**
+- **Images** from the gallery or camera (resized and compressed on the phone first)
+- **Shared cards**: a battle report, a runestone, a hero, a map location (M6), a rally call
+- **Reactions** (👍 ⚔️ 🛡️ 😂) and replies to a message
+- **Auto-translate** button on every message (Arabic ↔ English and more), as in the genre
+
+### 19.4 Safety (needed for a real public game)
+Profanity filter, report / block / mute, rate limits, image moderation before images are shown
+in public channels, chat history limits, a minimum age setting and moderator tools.
+Images in Realm chat are VIP 4+ only, and images in private and group chats can be turned off per player.
+
+### 19.5 Technology (free)
+Real chat needs a server. Plan: **Supabase** free tier, with Postgres for messages, friends and
+groups (protected by row-level security), **Realtime** for live delivery, **Storage** for images,
+and **Auth** for accounts. Push notifications go through Firebase Cloud Messaging (free) via
+Capacitor. Following the "one trip" rule (ARCHITECTURE §14), a channel's history and the
+senders' names load in one query, never one query per message.
+
+## 20. VIP (Hirð rank 1–5)
+
+VIP points come from daily logins, quests and events (free), and later also from purchases
+(MONETIZATION.md, M11). Perks favour comfort and social features, never pay-only power:
+
+| VIP | Chat & social perks | Comfort perks |
+|---|---|---|
+| **1** | Norse emote pack, 1 group chat (10 members) | Free finish at ≤ 6 min |
+| **2** | Send images to friends and in clan chat, 2 groups (20) | +1 training batch queue |
+| **3** | Gold-coloured name in Realm chat, 3 groups (30), sticker pack | Free finish at ≤ 8 min |
+| **4** | Images in Realm chat, animated avatar frame, 5 groups (50) | 5th builder at a reduced Gold cost |
+| **5** | Custom chat bubble, VIP-only lounge channel, 8 groups (100) | Free finish at ≤ 10 min, +1 march slot (M6) |
+
+## 21. Out of scope for v1
 Real payments (planned, see MONETIZATION.md), real-time multiplayer (M10), iOS store, voice chat.

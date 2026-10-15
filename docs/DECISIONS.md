@@ -28,4 +28,7 @@ Every significant decision, with the reason. Status: **✅ Owner-approved** · *
 | D-023 | Buildings are capped at the Great Hall level, and Great Hall 3+ needs the Storehouse at one level below | The genre's core gate. It teaches that the Storehouse matters | 🟡 |
 | D-024 | **Battles are simultaneous per round** (no phase order) | Tests showed a phase order gave berserkers a free first blow that cancelled the Shieldwall counter. Simultaneous strikes keep the triangle fair | ✅ (technical) |
 | D-025 | **First PvE is the Draugr Barrow** next to the hold (10 levels, first-clear Gold) before the world map exists | Lets players fight from M3 on, and the barrow later moves onto the Midgard map (M6) | 🟡 |
+| D-026 | **Chat & social** in every channel (Realm, clan, private, groups) with images, emotes, translation and safety tools; **VIP 1–5** unlock chat and comfort perks | Owner request after M3 | ✅ |
+| D-027 | Chat goes online **early (M3.6)** on Supabase's free tier, ahead of the full online realm (M10) | Real chat cannot be faked with bots. Accounts and messages are a smaller first online step than a shared world | 🟡 (order to confirm with owner) |
+| D-028 | **Visual upgrade pass (M3.5)**: CC0 PBR textures, HDRI light, SSAO/bloom, detailed buildings, villagers | Owner: "more detail, not just colours" | ✅ |
 | D-019 | No slavery (thralls) and no horned helmets | Ethics, and historical accuracy | 🟡 |
