@@ -10,6 +10,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     ...devices['Pixel 7'],
+    locale: 'en-US',
     launchOptions: {
       ...(executablePath ? { executablePath } : {}),
       // Software WebGL so the test also runs on CI machines without a GPU.

@@ -17,3 +17,5 @@ export * from './data/troops';
 export * from './data/draugr';
 export * from './systems/combat';
 export * from './systems/military';
+export * from './data/mainQuests';
+export * from './systems/goals';

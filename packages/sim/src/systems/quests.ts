@@ -6,7 +6,7 @@ import { dayIndex, type GameState } from '../state';
 export function rollQuestDay(state: GameState, now: number, events: GameEvent[]): void {
   const today = dayIndex(now);
   if (today !== state.quests.day) {
-    state.quests = { day: today, progress: {}, claimed: [] };
+    state.quests = { day: today, progress: {}, claimed: [], chests: [] };
     events.push({ type: 'quests.reset', day: today });
   }
 }

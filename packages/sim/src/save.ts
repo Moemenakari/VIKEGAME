@@ -1,6 +1,6 @@
 import { BUILDING_TYPES } from './data/buildings';
 import { RESOURCES } from './data/resources';
-import { STATE_VERSION, emptyMilitary, type GameState } from './state';
+import { STATE_VERSION, emptyMilitary, freshProfile, type GameState } from './state';
 
 /**
  * Save format: the WHOLE game in one JSON document, written and read in one trip
@@ -16,6 +16,11 @@ interface SaveFile {
 const migrations: Record<number, (state: Record<string, unknown>) => Record<string, unknown>> = {
   // v1 → v2 (M3): the hold gains an army, training and healing queues, reports and PvE progress.
   1: (state) => ({ ...emptyMilitary(typeof state.seed === 'number' ? state.seed : 1), ...state }),
+  // v2 → v3: player profile, main quest line and daily chests.
+  2: (state) => {
+    const quests = (state.quests ?? {}) as Record<string, unknown>;
+    return { ...freshProfile(), ...state, quests: { chests: [], ...quests } };
+  },
 };
 
 export function serialize(state: GameState): string {
@@ -65,7 +70,16 @@ function isGameState(s: unknown): s is GameState {
   if (s.healing !== null && !(isObj(s.healing) && isCounts(s.healing.troops) && isNum(s.healing.endsAt))) {
     return false;
   }
-  return isNum(s.nextReportId) && isObj(s.pve) && isNum(s.pve.draugrCleared) && isNum(s.rngState);
+  if (!Array.isArray(q.chests)) return false;
+  const p = s.profile;
+  if (!isObj(p) || typeof p.name !== 'string' || !isNum(p.avatar) || !Array.isArray(p.owned)) return false;
+  return (
+    isNum(s.mainQuest) &&
+    isNum(s.nextReportId) &&
+    isObj(s.pve) &&
+    isNum(s.pve.draugrCleared) &&
+    isNum(s.rngState)
+  );
 }
 
 /** Returns the saved game, upgraded to the current version, or null if the save is unusable. */

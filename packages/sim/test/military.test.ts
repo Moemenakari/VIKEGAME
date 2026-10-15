@@ -10,6 +10,7 @@ import {
   newGame,
   resolveBattle,
   serialize,
+  STATE_VERSION,
   totalPower,
   trainCost,
   trainDurationMs,
@@ -184,7 +185,7 @@ describe('battles with the draugr', () => {
 });
 
 describe('save migration', () => {
-  it('upgrades a version-1 save (M2) to version 2 with an empty army', () => {
+  it('upgrades a version-1 save (M2) to the current version with an empty army', () => {
     const v2 = newGame(3, T0);
     const v1 = JSON.parse(serialize(v2));
     v1.version = 1;
@@ -193,7 +194,9 @@ describe('save migration', () => {
       delete v1.state[k];
     const loaded = deserialize(JSON.stringify(v1));
     expect(loaded).not.toBeNull();
-    expect(loaded!.version).toBe(2);
+    expect(loaded!.version).toBe(STATE_VERSION);
+    expect(loaded!.profile.owned).toEqual([0, 1, 2]);
+    expect(loaded!.quests.chests).toEqual([]);
     expect(loaded!.army).toEqual({ troops: {}, wounded: {} });
     expect(loaded!.buildings).toEqual(v2.buildings);
   });

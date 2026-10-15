@@ -10,7 +10,7 @@ test('build, finish, save and claim a quest on a phone', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 
-  await page.goto('/');
+  await page.goto('/?quality=low');
   await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
   await expect(page.getByTestId('resources')).toBeVisible();
   await page.waitForTimeout(1200);
@@ -61,7 +61,7 @@ test('raise a Shield Yard, train warriors and clear the first draugr barrow', as
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
-  await page.goto('/');
+  await page.goto('/?quality=low');
   await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
   const state = () => page.evaluate(() => window.__jarlheim!.state());
 
@@ -96,6 +96,43 @@ test('raise a Shield Yard, train warriors and clear the first draugr barrow', as
   await expect(page.getByTestId('report')).toContainText('Victory');
   await page.screenshot({ path: 'test-results/report.png' });
   expect((await state()).pve.draugrCleared).toBe(1);
+
+  expect(errors).toEqual([]);
+});
+
+test('the guide arrow leads to the next step, and the language switches to Arabic', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  await page.goto('/?quality=low');
+  await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
+
+  // First main quest: Great Hall level 2. The arrow opens the hall with Upgrade pulsing.
+  await expect(page.getByTestId('guide')).toContainText('Great Hall');
+  await page.getByTestId('guide-go').click();
+  await expect(page.getByTestId('upgrade')).toHaveClass(/pulse/);
+  await page.screenshot({ path: 'test-results/guide.png' });
+  await page.getByTestId('upgrade').click();
+  await expect(page.getByTestId('upgrade')).toBeHidden();
+
+  // Daily quest arrow: "Produce Wheat" goes to the farm's plot or an empty plot.
+  await page.getByTestId('quests-button').click();
+  await expect(page.getByTestId('chest-track')).toBeVisible();
+  await page.screenshot({ path: 'test-results/quests-daily.png' });
+  await page.getByTestId('go-train-30').click();
+  await expect(page.getByTestId('build-shieldYard')).toHaveClass(/pulse/);
+  await page.getByLabel('Close').click();
+
+  // One tap switches the whole interface to Arabic, right to left.
+  await page.getByTestId('lang-button').click();
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  await expect(page.getByTestId('guide')).toContainText('القاعة الكبرى');
+  await page.screenshot({ path: 'test-results/arabic.png' });
+
+  // Profile: pick a free picture.
+  await page.getByTestId('profile-button').click();
+  await page.getByTestId('avatar-2').click();
+  expect(await page.evaluate(() => window.__jarlheim!.state().profile.avatar)).toBe(2);
 
   expect(errors).toEqual([]);
 });

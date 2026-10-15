@@ -2,6 +2,8 @@ import { BUILDINGS, type BuildingType } from './data/buildings';
 import { ECONOMY } from './data/economy';
 import { HALL_PLOT_ID, PLOTS } from './data/plots';
 import { DAILY_QUESTS } from './data/quests';
+import { AVATARS, DAILY_CHESTS, MAIN_QUESTS } from './data/mainQuests';
+import { activityPoints, mainGoalDone } from './systems/goals';
 import { DRAUGR_BANDS, DRAUGR_UNITS } from './data/draugr';
 import { MILITARY, TRAINED_AT, TROOPS } from './data/troops';
 import { createRng } from './rng';
@@ -46,7 +48,12 @@ export type Command =
   | { type: 'train'; buildingId: string; troopId: string; count: number }
   | { type: 'heal' }
   | { type: 'attackDraugr'; level: number; troops: Record<string, number> }
-  | { type: 'readReport'; reportId: number };
+  | { type: 'readReport'; reportId: number }
+  | { type: 'claimMainQuest' }
+  | { type: 'claimQuestChest'; index: number }
+  | { type: 'setName'; name: string }
+  | { type: 'setAvatar'; avatar: number }
+  | { type: 'buyAvatar'; avatar: number };
 
 /** Which timer a finish command targets: a construction, a training batch, or healing. */
 export type TimerKind = 'build' | 'train' | 'heal';
@@ -443,6 +450,51 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     grant(state.resources, quest.reward);
     state.quests.claimed.push(quest.id);
     events.push({ type: 'quest.claimed', questId: quest.id, reward: quest.reward });
+    return null;
+  },
+
+  claimMainQuest(state, _cmd, _now, events) {
+    const quest = MAIN_QUESTS[state.mainQuest];
+    if (!quest) return fail('NOT_READY', 'All main quests are done');
+    if (!mainGoalDone(state, quest.goal)) return fail('NOT_READY', 'Quest not finished yet');
+    grant(state.resources, quest.reward);
+    state.mainQuest++;
+    events.push({ type: 'quest.claimed', questId: quest.id, reward: quest.reward });
+    return null;
+  },
+
+  claimQuestChest(state, cmd, _now, events) {
+    const chest = DAILY_CHESTS[cmd.index];
+    if (!chest) return fail('UNKNOWN', 'No such chest');
+    if (state.quests.chests.includes(cmd.index)) return fail('NOT_READY', 'Already claimed');
+    if (activityPoints(state) < chest.points) return fail('NOT_READY', 'Quest not finished yet');
+    grant(state.resources, chest.reward);
+    state.quests.chests.push(cmd.index);
+    events.push({ type: 'quest.claimed', questId: `chest-${cmd.index}`, reward: chest.reward });
+    return null;
+  },
+
+  setName(state, cmd) {
+    const name = cmd.name.trim();
+    if (name.length < 3 || name.length > 16) return fail('UNKNOWN', 'Names are 3 to 16 letters');
+    state.profile.name = name;
+    return null;
+  },
+
+  setAvatar(state, cmd) {
+    if (!state.profile.owned.includes(cmd.avatar)) return fail('LOCKED', 'Unlock this picture first');
+    state.profile.avatar = cmd.avatar;
+    return null;
+  },
+
+  buyAvatar(state, cmd) {
+    const a = AVATARS.find((x) => x.id === cmd.avatar);
+    if (!a) return fail('UNKNOWN', 'No such picture');
+    if (state.profile.owned.includes(a.id)) return fail('NOT_READY', 'Already claimed');
+    if (state.resources.gold < a.cost) return fail('NOT_ENOUGH', 'Not enough Gold');
+    state.resources.gold -= a.cost;
+    state.profile.owned.push(a.id);
+    state.profile.avatar = a.id;
     return null;
   },
 };

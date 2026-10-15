@@ -70,6 +70,11 @@ export class CameraRig {
     this.target.copy(this.goalTarget);
   }
 
+  /** Glides the camera to a new focus point instead of jumping there. */
+  glideTo(x: number, y: number, z: number): void {
+    this.goalTarget.set(x, y, z);
+  }
+
   /** Smoothly follows the goals. Returns true while the camera is still moving. */
   update(dt: number): boolean {
     const k = 1 - Math.exp(-DAMPING * dt);

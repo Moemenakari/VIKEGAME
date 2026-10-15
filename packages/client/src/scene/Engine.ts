@@ -1,4 +1,4 @@
-import { BUILDINGS, generateHoldTerrain, hallLevel, type GameState } from '@jarlheim/sim';
+import { generateHoldTerrain, hallLevel, type GameState } from '@jarlheim/sim';
 import * as THREE from 'three';
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -10,6 +10,7 @@ import { initSurfaces } from './textures/surfaces';
 import { CameraRig } from './CameraRig';
 import { HoldScene, type PickId } from './hold/HoldScene';
 import type { QualitySettings } from './quality';
+import { bName, t } from '../ui/i18n';
 
 export interface EngineCallbacks {
   onSelect: (id: PickId | null) => void;
@@ -145,7 +146,7 @@ export class Engine {
     const hall = hallLevel(state);
     for (const [id, label] of this.labels) {
       if (id === 'barrow') {
-        label.text.textContent = `Draugr Barrow · ${Math.min(state.pve.draugrCleared + 1, 10)}`;
+        label.text.textContent = `${t('barrow')} · ${Math.min(state.pve.draugrCleared + 1, 10)}`;
         label.el.dataset.kind = 'enemy';
         label.bar.style.display = 'none';
         continue;
@@ -154,8 +155,8 @@ export class Engine {
       const job = state.queue.find((j) => j.buildingId === id);
       const slot = this.hold.slots.get(id)!;
       let text = '';
-      if (b) text = b.level > 0 ? `${BUILDINGS[b.type].name} · ${b.level}` : BUILDINGS[b.type].name;
-      else if (hall >= slot.unlockHall) text = '+ Build';
+      if (b) text = b.level > 0 ? `${bName(b.type)} · ${b.level}` : bName(b.type);
+      else if (hall >= slot.unlockHall) text = t('plusBuild');
       label.text.textContent = text;
       label.el.dataset.kind = b ? 'building' : text ? 'empty' : 'locked';
       label.el.classList.toggle('selected', id === this.selected);
@@ -174,6 +175,18 @@ export class Engine {
   setSelected(id: string | null): void {
     this.selected = id;
     for (const [lid, label] of this.labels) label.el.classList.toggle('selected', lid === id);
+  }
+
+  /** Glides the camera to a plot or the barrow (used by the quest "Go" arrows). */
+  focusOn(id: PickId): void {
+    const p = this.hold.anchorOf(id);
+    this.rig.glideTo(p.x, p.y, p.z + 6);
+    this.lastInput = performance.now();
+  }
+
+  setSnow(on: boolean): void {
+    this.hold.setSnow(on);
+    this.lastInput = performance.now();
   }
 
   /** Screen position (CSS pixels) of a pickable, used by tests and UI anchors. */

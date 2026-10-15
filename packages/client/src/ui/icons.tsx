@@ -109,3 +109,138 @@ export const TroopTypeIcon = ({
     </g>,
   );
 };
+
+// ---- HUD buttons (icons instead of words: owner request) --------------------------
+
+export const BuilderIcon = ({ size = 22 }: IconProps) =>
+  svg(
+    size,
+    <g>
+      <rect x="10.8" y="8" width="2.4" height="14" rx="1.2" fill="#9a6a3a" transform="rotate(-35 12 15)" />
+      <path d="M5 6l6-3 3 3-6 4z" fill="#c9d0d6" stroke="#5f6770" strokeWidth=".8" />
+      <circle cx="18" cy="18" r="3.5" fill="#e3b552" />
+    </g>,
+  );
+
+export const ArmyIcon = ({ size = 22 }: IconProps) =>
+  svg(
+    size,
+    <g>
+      <path d="M4 20L16 8l1.5 1.5L5.5 21.5zM15 4l5 5-2 2-5-5z" fill="#d7dde3" />
+      <path d="M20 20L8 8 6.5 9.5l12 12zM9 4L4 9l2 2 5-5z" fill="#e3b552" />
+    </g>,
+  );
+
+export const SagaIcon = ({ size = 22 }: IconProps) =>
+  svg(
+    size,
+    <g>
+      <path d="M6 3h10l3 3v15H6z" fill="#e9dcc0" stroke="#8a6524" strokeWidth="1.2" />
+      <path d="M9 8h7M9 11h7M9 14h5" stroke="#8a6524" strokeWidth="1.4" strokeLinecap="round" />
+      <circle cx="16.5" cy="18" r="2.6" fill="#a8402f" />
+    </g>,
+  );
+
+export const QuestIcon = ({ size = 22 }: IconProps) =>
+  svg(
+    size,
+    <g>
+      <rect x="4" y="3" width="16" height="19" rx="2.5" fill="#e9dcc0" stroke="#8a6524" strokeWidth="1.2" />
+      <path d="M7.5 9l2 2 3.5-4M7.5 16l2 2 3.5-4" fill="none" stroke="#5c8a2e" strokeWidth="1.8" />
+      <path d="M15 10h3M15 17h3" stroke="#8a6524" strokeWidth="1.4" />
+    </g>,
+  );
+
+export const HeroIcon = ({ size = 22 }: IconProps) =>
+  svg(
+    size,
+    <g>
+      <path d="M5 13a7 7 0 0114 0v2H5z" fill="#c9d0d6" stroke="#5f6770" strokeWidth=".8" />
+      <path d="M3 11l3 2M21 11l-3 2" stroke="#e9dcc0" strokeWidth="2" strokeLinecap="round" />
+      <path d="M11 13h2v7h-2z" fill="#5f6770" />
+      <path d="M7 15c1 5 9 5 10 0" fill="#c48a4a" />
+    </g>,
+  );
+
+export const BagIcon = ({ size = 22 }: IconProps) =>
+  svg(
+    size,
+    <g>
+      <path d="M6 9h12l1.5 12h-15z" fill="#8a5a36" stroke="#5a3a1e" strokeWidth="1" />
+      <path d="M9 9V6a3 3 0 016 0v3" fill="none" stroke="#e3b552" strokeWidth="1.6" />
+    </g>,
+  );
+
+export const GearIcon = ({ size = 22 }: IconProps) =>
+  svg(
+    size,
+    <g fill="#d7dde3">
+      <path d="M10.5 2h3l.5 3 2 1 2.6-1.6 2.1 2.1L19 9.1l1 2 3 .4v3l-3 .5-1 2 1.6 2.6-2.1 2.1-2.6-1.6-2 1-.5 3h-3l-.5-3-2-1-2.6 1.6-2.1-2.1L5 16.9l-1-2-3-.4v-3l3-.5 1-2-1.6-2.6 2.1-2.1L8 6l2-1z" />
+      <circle cx="12" cy="13" r="3.4" fill="#2a2f3a" />
+    </g>,
+  );
+
+export const GlobeIcon = ({ size = 30 }: IconProps) =>
+  svg(
+    size,
+    <g>
+      <circle cx="12" cy="12" r="10" fill="#2f6f9a" stroke="#e3b552" strokeWidth="1.4" />
+      <path
+        d="M6 7c2 1 3 0 4 2s-1 3 1 4 2 3 1 5M14 4c0 2 2 2 3 3s3 1 3 3M15 14c1 0 2 1 2 3"
+        fill="none"
+        stroke="#7fbf6a"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+    </g>,
+  );
+
+export const ChestIcon = ({
+  size = 28,
+  open = false,
+  glow = false,
+}: IconProps & { open?: boolean; glow?: boolean }) =>
+  svg(
+    size,
+    <g>
+      {glow && <circle cx="12" cy="13" r="11" fill="#f0c44c" fillOpacity=".35" />}
+      <rect x="4" y="11" width="16" height="9" rx="1.5" fill="#8a5a36" stroke="#e3b552" strokeWidth="1.2" />
+      {open ? (
+        <path d="M4 11l2-6h12l2 6z" fill="#5a3a1e" stroke="#e3b552" strokeWidth="1.2" />
+      ) : (
+        <path d="M4 11a8 5 0 0116 0z" fill="#9a6a3a" stroke="#e3b552" strokeWidth="1.2" />
+      )}
+      <rect x="10.5" y="10" width="3" height="4" rx=".8" fill="#e3b552" />
+    </g>,
+  );
+
+/**
+ * Profile pictures: Viking faces drawn in SVG (no downloaded art). The first three
+ * are free; the others are bought with earned Gold (sim `AVATARS`).
+ */
+const LOOKS = [
+  { bg: '#6d2a22', helm: '#9aa3ad', beard: '#c48a4a', skin: '#e8c4a0' },
+  { bg: '#24485e', helm: '#c9a24a', beard: '#7a4a26', skin: '#d9a87e' },
+  { bg: '#2f5a32', helm: '#6f7780', beard: '#e0c070', skin: '#f0d0b0' },
+  { bg: '#4a2a5e', helm: '#e3b552', beard: '#d9d4c8', skin: '#e8c4a0' },
+  { bg: '#5e3a1a', helm: '#c9d0d6', beard: '#a83a2c', skin: '#c99872' },
+  { bg: '#1a1f2a', helm: '#f0c44c', beard: '#2a1a10', skin: '#e0b48e' },
+] as const;
+
+export const AvatarFace = ({ id, size = 44 }: { id: number; size?: number }) => {
+  const l = LOOKS[id % LOOKS.length]!;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill={l.bg} />
+      <circle cx="12" cy="12" r="5.2" fill={l.skin} />
+      <path d="M6.4 11a5.6 5.6 0 0111.2 0z" fill={l.helm} />
+      <rect x="11.3" y="10.6" width="1.4" height="3.8" fill={l.helm} />
+      {id >= 3 && (
+        <path d="M6.4 9.5L3.5 6M17.6 9.5L20.5 6" stroke="#e9e1cf" strokeWidth="1.6" strokeLinecap="round" />
+      )}
+      <path d="M7 14c.5 6 9.5 6 10 0-2 1.2-8 1.2-10 0z" fill={l.beard} />
+      <circle cx="10" cy="12.6" r=".7" fill="#1a1a1a" />
+      <circle cx="14" cy="12.6" r=".7" fill="#1a1a1a" />
+    </svg>
+  );
+};

@@ -1,0 +1,91 @@
+import {
+  BUILDINGS,
+  DAILY_QUESTS,
+  PLOTS,
+  hallLevel,
+  type BuildingType,
+  type GameState,
+  type MainGoal,
+} from '@jarlheim/sim';
+
+/**
+ * Where a quest's "Go" arrow takes the player: which plot (or the barrow) to open,
+ * and which button to make pulse there. Pure: it only reads the state.
+ */
+export interface Route {
+  /** A plot id, or 'barrow'. */
+  target: string;
+  /** data-testid of the button to highlight once the panel is open. */
+  hint: string;
+}
+
+const hasJob = (state: GameState, plotId: string) => state.queue.some((j) => j.buildingId === plotId);
+
+function emptyPlot(state: GameState): string | null {
+  const hall = hallLevel(state);
+  return PLOTS.find((p) => p.unlockHall <= hall && !state.buildings[p.id])?.id ?? null;
+}
+
+/** The best plot holding this building type: highest level first. */
+function plotOf(state: GameState, type: BuildingType): string | null {
+  let best: { id: string; level: number } | null = null;
+  for (const b of Object.values(state.buildings)) {
+    if (b.type === type && (!best || b.level > best.level)) best = { id: b.id, level: b.level };
+  }
+  return best?.id ?? null;
+}
+
+function toBuilding(state: GameState, type: BuildingType): Route | null {
+  const plot = plotOf(state, type);
+  if (plot) return { target: plot, hint: hasJob(state, plot) ? 'finish' : 'upgrade' };
+  const empty = emptyPlot(state);
+  return empty ? { target: empty, hint: `build-${type}` } : null;
+}
+
+function toTraining(state: GameState): Route | null {
+  const trainer = Object.values(state.buildings)
+    .filter((b) => BUILDINGS[b.type].trains && b.level > 0)
+    .sort((a, b) => b.level - a.level)[0];
+  return trainer ? { target: trainer.id, hint: 'train' } : toBuilding(state, 'shieldYard');
+}
+
+export function routeForGoal(state: GameState, goal: MainGoal): Route | null {
+  switch (goal.kind) {
+    case 'building':
+      return toBuilding(state, goal.building);
+    case 'troops':
+      return toTraining(state);
+    case 'barrow':
+      return { target: 'barrow', hint: 'attack' };
+  }
+}
+
+/** Any construction: an empty plot first, otherwise the Great Hall. */
+function toAnyConstruction(state: GameState): Route | null {
+  const empty = emptyPlot(state);
+  if (empty) return { target: empty, hint: 'build-farmstead' };
+  return toBuilding(state, 'greatHall');
+}
+
+export function routeForDaily(state: GameState, questId: string): Route | null {
+  const quest = DAILY_QUESTS.find((q) => q.id === questId);
+  if (!quest) return null;
+  switch (quest.metric) {
+    case 'produced.food':
+      return toBuilding(state, 'farmstead');
+    case 'produced.timber':
+      return toBuilding(state, 'woodcutter');
+    case 'troops.trained':
+      return toTraining(state);
+    case 'battle.won':
+      return { target: 'barrow', hint: 'attack' };
+    case 'finish.free':
+    case 'building.completed': {
+      const job = state.queue[0];
+      if (job) return { target: job.buildingId, hint: 'finish' };
+      return toAnyConstruction(state);
+    }
+    default:
+      return toAnyConstruction(state);
+  }
+}

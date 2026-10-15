@@ -34,3 +34,7 @@ Every significant decision, with the reason. Status: **✅ Owner-approved** · *
 | D-029 | **Surface textures are generated in code** (wood planks and grain, stone, turf, snow, cloth, ground: detail + normal + roughness maps) | The cloud environment blocks Poly Haven, ambientCG and Kenney downloads. Generated textures are original (no licence to track) and need no download. Photo-scanned CC0 textures can be swapped in later if those hosts are allowed | ✅ (technical) |
 | D-030 | **HDRI sky light** from Poly Haven (CC0) via the `@pmndrs/assets` npm package, lazy-loaded after the first frame | Real-world light and reflections on every surface for ~150 KB | ✅ (technical) |
 | D-019 | No slavery (thralls) and no horned helmets | Ethics, and historical accuracy | 🟡 |
+| D-031 | **Graphics always High** (no quality picker); `?quality=low` only for automated tests | Owner: "all graphics High, no Low/Medium" | ✅ |
+| D-032 | **Interface in Arabic (RTL), French and English**, switched with one tap on the top bar; the sim stays English and the client translates (`ui/i18n.ts`) | Owner request | ✅ |
+| D-033 | **Guide bar + "Go" arrows**: one main quest at a time at the bottom; every quest has an arrow that glides the camera to the right building, opens it and pulses the button to tap | Owner, after the Last Z video: "everything has a link that takes you there" | ✅ |
+| D-034 | **Daily chest track** (activity points from daily quests) and **profile pictures**: 3 free, more for earned Gold | Owner request; Gold stays earn-only until M11 | ✅ |

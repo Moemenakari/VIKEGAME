@@ -66,6 +66,14 @@ export interface DailyQuestState {
   day: number;
   progress: Record<string, number>;
   claimed: string[];
+  /** Indexes of the daily activity chests already opened today. */
+  chests: number[];
+}
+
+export interface PlayerProfile {
+  name: string;
+  avatar: number;
+  owned: number[];
 }
 
 /**
@@ -96,9 +104,12 @@ export interface GameState {
   pve: { draugrCleared: number };
   /** Seeded RNG state for battles, so the same game always plays out the same. */
   rngState: number;
+  profile: PlayerProfile;
+  /** Index of the current step in the main quest line. */
+  mainQuest: number;
 }
 
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
@@ -116,8 +127,9 @@ export function newGame(seed: number, now: number): GameState {
       a2: { id: 'a2', type: 'woodcutter', level: 1 },
     },
     queue: [],
-    quests: { day: dayIndex(now), progress: {}, claimed: [] },
+    quests: { day: dayIndex(now), progress: {}, claimed: [], chests: [] },
     ...emptyMilitary(seed),
+    ...freshProfile(),
   };
 }
 
@@ -135,4 +147,9 @@ export function emptyMilitary(seed: number) {
     GameState,
     'army' | 'training' | 'healing' | 'reports' | 'nextReportId' | 'pve' | 'rngState'
   >;
+}
+
+/** Fields added in save version 3: profile and main quest line. */
+export function freshProfile(): Pick<GameState, 'profile' | 'mainQuest'> {
+  return { profile: { name: 'Jarl', avatar: 0, owned: [0, 1, 2] }, mainQuest: 0 };
 }

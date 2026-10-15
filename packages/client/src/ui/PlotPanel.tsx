@@ -15,6 +15,7 @@ import {
 } from '@jarlheim/sim';
 import type { GameStore } from '../game/store';
 import { formatAmount, formatCost, formatDuration } from './format';
+import { bDesc, bName, errorText, t } from './i18n';
 import { ResourceIcon } from './icons';
 import { HealSection, TrainSection } from './military';
 
@@ -58,12 +59,12 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
   if (!building) {
     const options = BUILDING_TYPES.filter((t) => t !== 'greatHall');
     return (
-      <section className="card panel" data-testid="build-menu" role="dialog" aria-label="Build">
-        <button className="close" onClick={onClose} aria-label="Close">
+      <section className="card panel" data-testid="build-menu" role="dialog" aria-label={t('build')}>
+        <button className="close" onClick={onClose} aria-label={t('close')}>
           ×
         </button>
-        <h2>Build</h2>
-        <p className="norse">Choose what to raise on this plot</p>
+        <h2>{t('build')}</h2>
+        <p className="norse">{t('chooseBuild')}</p>
         <ul className="build-list">
           {options.map((type: BuildingType) => {
             const def = BUILDINGS[type];
@@ -76,11 +77,12 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
                   disabled={blocked !== null}
                   onClick={() => run(cmd, true)}
                   data-testid={`build-${type}`}
+                  data-hint={`build-${type}`}
                 >
                   <span className="title">
-                    {def.name} <em>{def.norse}</em>
+                    {bName(type)} <em>{def.norse}</em>
                   </span>
-                  <span className="desc">{blocked ?? def.description}</span>
+                  <span className="desc">{blocked ? errorText(blocked) : bDesc(type)}</span>
                   <span className="meta">
                     <Cost cost={upgradeCost(type, 1)} state={state} />
                     <span className="time">⏱ {formatDuration(upgradeDurationMs(type, 1))}</span>
@@ -106,70 +108,69 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
     : 0;
 
   return (
-    <section className="card panel" data-testid="info-card" role="dialog" aria-label={def.name}>
-      <button className="close" onClick={onClose} aria-label="Close">
+    <section className="card panel" data-testid="info-card" role="dialog" aria-label={bName(building.type)}>
+      <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
-      <h2>{def.name}</h2>
+      <h2>{bName(building.type)}</h2>
       <p className="norse">
-        {def.norse} · {building.level > 0 ? `Level ${building.level}` : 'Being raised'}
+        {def.norse} · {building.level > 0 ? t('level', { n: building.level }) : t('beingRaised')}
       </p>
-      <p>{def.description}</p>
+      <p>{bDesc(building.type)}</p>
       {def.produces && building.level > 0 && (
         <p className="stat">
-          <ResourceIcon res={def.produces.resource} size={14} /> +{formatAmount(rate)} per hour
+          <ResourceIcon res={def.produces.resource} size={14} /> {t('perHour', { n: formatAmount(rate) })}
         </p>
       )}
       {def.trains && building.level > 0 && (
         <TrainSection key={building.id} state={state} building={building} now={now} run={run} />
       )}
       {def.woundedCapacity && building.level > 0 && <HealSection state={state} now={now} run={run} />}
-      {def.storage && (
-        <p className="stat">Storage for each resource: {formatAmount(storageCap(state).food)}</p>
-      )}
+      {def.storage && <p className="stat">{t('storageEach', { n: formatAmount(storageCap(state).food) })}</p>}
 
       {job && left !== null ? (
         <div className="progress-block">
           <div className="progress">
             <i style={{ width: `${100 * (1 - left / Math.max(1, job.endsAt - job.startedAt))}%` }} />
           </div>
-          <p className="stat">
-            Level {job.targetLevel} in {formatDuration(left)}
-          </p>
+          <p className="stat">{t('levelIn', { n: job.targetLevel, t: formatDuration(left) })}</p>
           {left <= ECONOMY.freeFinishMs ? (
             <button
               className="primary"
               onClick={() => run({ type: 'finishFree', buildingId: building.id }, true)}
               data-testid="finish-free"
+              data-hint="finish"
             >
-              Finish now · Free
+              {t('finishFree')}
             </button>
           ) : (
             <button
               className="secondary"
               onClick={() => run({ type: 'finishWithGold', buildingId: building.id }, true)}
               data-testid="finish-gold"
+              data-hint="finish"
             >
-              Finish now · {goldToFinish(left)} Gold
+              {t('finishGold', { n: goldToFinish(left) })}
             </button>
           )}
         </div>
       ) : building.level >= ECONOMY.maxBuildingLevel ? (
-        <p className="soon">Highest level reached</p>
+        <p className="soon">{t('maxLevel')}</p>
       ) : (
         <div className="upgrade-block">
           <div className="meta">
             <Cost cost={upgradeCost(building.type, next)} state={state} />
             <span className="time">⏱ {formatDuration(upgradeDurationMs(building.type, next))}</span>
           </div>
-          {blocked && <p className="blocked">{blocked}</p>}
+          {blocked && <p className="blocked">{errorText(blocked)}</p>}
           <button
             className="primary"
             disabled={blocked !== null}
             onClick={() => run(upgrade, true)}
             data-testid="upgrade"
+            data-hint="upgrade"
           >
-            Upgrade to level {next}
+            {t('upgradeTo', { n: next })}
           </button>
         </div>
       )}

@@ -25,6 +25,7 @@ import {
 import { useState } from 'react';
 import type { GameStore } from '../game/store';
 import { formatAmount, formatDuration } from './format';
+import { errorText, t, troopName } from './i18n';
 import { ResourceIcon, TroopTypeIcon } from './icons';
 
 type Run = (cmd: Command, close?: boolean) => void;
@@ -64,12 +65,13 @@ function TimerActions({
       className="primary"
       onClick={() => run({ type: 'finishFree', buildingId, queue })}
       data-testid={`${queue}-finish-free`}
+      data-hint="finish"
     >
-      Finish now · Free
+      {t('finishFree')}
     </button>
   ) : (
     <button className="secondary" onClick={() => run({ type: 'finishWithGold', buildingId, queue })}>
-      Finish now · {goldToFinish(left)} Gold
+      {t('finishGold', { n: goldToFinish(left) })}
     </button>
   );
 }
@@ -107,12 +109,12 @@ export function TrainSection({
     const left = Math.max(0, job.endsAt - now);
     return (
       <div className="section">
-        <h3>Training</h3>
+        <h3>{t('training')}</h3>
         <div className="progress">
           <i style={{ width: `${100 * (1 - left / Math.max(1, job.endsAt - job.startedAt))}%` }} />
         </div>
         <p className="stat">
-          {job.count} × {TROOPS[job.troopId]!.name} in {formatDuration(left)}
+          {t('readyIn', { n: job.count, name: troopName(job.troopId), t: formatDuration(left) })}
         </p>
         <TimerActions run={run} buildingId={building.id} left={left} queue="train" />
       </div>
@@ -124,7 +126,7 @@ export function TrainSection({
   const check = apply(state, cmd, now);
   return (
     <div className="section">
-      <h3>Train</h3>
+      <h3>{t('train')}</h3>
       <div className="tiers">
         {tiers.map((t) => (
           <button
@@ -133,14 +135,12 @@ export function TrainSection({
             disabled={building.level < t.unlockLevel}
             onClick={() => setTroopId(t.id)}
           >
-            <TroopTypeIcon type={t.type} size={16} /> {t.name}
-            <small>{building.level < t.unlockLevel ? `Level ${t.unlockLevel}` : `T${t.tier}`}</small>
+            <TroopTypeIcon type={t.type} size={16} /> {troopName(t.id, t.name)}
+            <small>{building.level < t.unlockLevel ? `🔒 ${t.unlockLevel}` : `T${t.tier}`}</small>
           </button>
         ))}
       </div>
-      <p className="muted stats-line">
-        Attack {troop.atk} · Defence {troop.def} · Health {troop.hp}
-      </p>
+      <p className="muted stats-line">{t('stats', { a: troop.atk, d: troop.def, h: troop.hp })}</p>
       <div className="count-row">
         <input
           type="range"
@@ -157,9 +157,15 @@ export function TrainSection({
         <CostLine cost={trainCost(troopId, n)} state={state} />
         <span className="time">⏱ {formatDuration(trainDurationMs(troopId, n))}</span>
       </div>
-      {!check.ok && <p className="blocked">{check.error.message}</p>}
-      <button className="primary" disabled={!check.ok} onClick={() => run(cmd)} data-testid="train">
-        Train {n} {troop.name}
+      {!check.ok && <p className="blocked">{errorText(check.error.message)}</p>}
+      <button
+        className="primary"
+        disabled={!check.ok}
+        onClick={() => run(cmd)}
+        data-testid="train"
+        data-hint="train"
+      >
+        {t('trainN', { n })} {troopName(troopId)}
       </button>
     </div>
   );
@@ -174,7 +180,7 @@ export function HealSection({ state, now, run }: { state: GameState; now: number
     const left = Math.max(0, state.healing.endsAt - now);
     return (
       <div className="section">
-        <h3>Healing</h3>
+        <h3>{t('healing')}</h3>
         <div className="progress">
           <i
             style={{
@@ -183,7 +189,7 @@ export function HealSection({ state, now, run }: { state: GameState; now: number
           />
         </div>
         <p className="stat">
-          {sumCounts(state.healing.troops)} warriors back on their feet in {formatDuration(left)}
+          {t('healingIn', { n: sumCounts(state.healing.troops), t: formatDuration(left) })}
         </p>
         <TimerActions run={run} buildingId="healing" left={left} queue="heal" />
       </div>
@@ -191,10 +197,8 @@ export function HealSection({ state, now, run }: { state: GameState; now: number
   }
   return (
     <div className="section">
-      <h3>Wounded</h3>
-      <p className="stat">
-        {wounded} wounded · room for {cap}
-      </p>
+      <h3>{t('wounded')}</h3>
+      <p className="stat">{t('woundedRoom', { n: wounded, c: cap })}</p>
       {wounded > 0 && (
         <>
           <div className="meta">
@@ -202,7 +206,7 @@ export function HealSection({ state, now, run }: { state: GameState; now: number
             <span className="time">⏱ {formatDuration(healDurationMs(state.army.wounded))}</span>
           </div>
           <button className="primary" onClick={() => run({ type: 'heal' })} data-testid="heal">
-            Heal all
+            {t('healAll')}
           </button>
         </>
       )}
@@ -222,7 +226,7 @@ function TroopList({ counts, empty }: { counts: Record<string, number>; empty: s
         return (
           <li key={id}>
             <TroopTypeIcon type={t.type} size={18} />
-            <span>{t.name}</span>
+            <span>{troopName(id, t.name)}</span>
             <small>T{t.tier}</small>
             <strong>{n}</strong>
           </li>
@@ -246,16 +250,16 @@ export function ArmyPanel({
   onBarrow: () => void;
 }) {
   return (
-    <section className="card panel" data-testid="army" role="dialog" aria-label="Army">
-      <button className="close" onClick={onClose} aria-label="Close">
+    <section className="card panel" data-testid="army" role="dialog" aria-label={t('warband')}>
+      <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
-      <h2>Your Warband</h2>
-      <p className="norse">Lið · {sumCounts(state.army.troops)} warriors at home</p>
-      <TroopList counts={state.army.troops} empty="No warriors yet. Build a Shield Yard and train some." />
+      <h2>{t('warband')}</h2>
+      <p className="norse">Lið · {t('warriorsHome', { n: sumCounts(state.army.troops) })}</p>
+      <TroopList counts={state.army.troops} empty={t('noWarriors')} />
       <HealSection state={state} now={now} run={run} />
       <button className="primary" onClick={onBarrow} data-testid="to-barrow">
-        March on the Draugr Barrow
+        {t('toBarrow')}
       </button>
     </section>
   );
@@ -284,8 +288,7 @@ export function BarrowPanel({
   const ours = strength(Object.entries(send).map(([id, count]) => ({ ...TROOPS[id]!, count })));
   const theirs = strength(Object.entries(band.units).map(([id, count]) => ({ ...DRAUGR_UNITS[id]!, count })));
   const ratio = theirs ? ours / theirs : 0;
-  const verdict =
-    ratio >= 1.6 ? 'Favourable' : ratio >= 1.1 ? 'Even' : ratio > 0 ? 'Risky' : 'No warriors chosen';
+  const verdict = ratio >= 1.6 ? 'favourable' : ratio >= 1.1 ? 'even' : ratio > 0 ? 'risky' : 'noneChosen';
 
   const attack = () => {
     const before = state.nextReportId;
@@ -295,12 +298,12 @@ export function BarrowPanel({
   };
 
   return (
-    <section className="card panel" data-testid="barrow" role="dialog" aria-label="Draugr Barrow">
-      <button className="close" onClick={onClose} aria-label="Close">
+    <section className="card panel" data-testid="barrow" role="dialog" aria-label={t('barrow')}>
+      <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
-      <h2>The Draugr Barrow</h2>
-      <p className="norse">Haugr · the dead walk at night</p>
+      <h2>{t('barrow')}</h2>
+      <p className="norse">Haugr · {t('barrowSub')}</p>
       <div className="levels">
         {DRAUGR_BANDS.map((b) => (
           <button
@@ -313,27 +316,24 @@ export function BarrowPanel({
           </button>
         ))}
       </div>
-      <h3>
-        Level {band.level} · {band.name}
-      </h3>
+      <h3>{t('level', { n: band.level })}</h3>
       <ul className="troop-list">
         {Object.entries(band.units).map(([id, n]) => {
           const u = DRAUGR_UNITS[id]!;
           return (
             <li key={id}>
               <TroopTypeIcon type={u.type} size={18} />
-              <span>{u.name}</span>
-              <small>{u.type}</small>
+              <span>{troopName(id, u.name)}</span>
               <strong>{n}</strong>
             </li>
           );
         })}
       </ul>
       <p className="muted">
-        Reward: <CostLine cost={band.reward} />
-        {band.level > state.pve.draugrCleared && ' + first-clear Gold'}
+        {t('reward')}: <CostLine cost={band.reward} />
+        {band.level > state.pve.draugrCleared && ` ${t('firstClear')}`}
       </p>
-      <h3>Send</h3>
+      <h3>{t('send')}</h3>
       <div className="send-list">
         {Object.entries(state.army.troops).map(([id, n]) => (
           <label key={id} className="send-item">
@@ -342,17 +342,24 @@ export function BarrowPanel({
               checked={!left[id]}
               onChange={() => setLeft({ ...left, [id]: !left[id] })}
             />
-            <TroopTypeIcon type={TROOPS[id]!.type} size={16} /> {n} {TROOPS[id]!.name}
+            <TroopTypeIcon type={TROOPS[id]!.type} size={16} /> {n} {troopName(id)}
           </label>
         ))}
-        {sumCounts(state.army.troops) === 0 && <p className="muted">No warriors at home.</p>}
+        {sumCounts(state.army.troops) === 0 && <p className="muted">{t('noneHome')}</p>}
       </div>
-      <p className={`verdict ${verdict.toLowerCase().replace(/\s+/g, '-')}`}>
-        Odds: <strong>{verdict}</strong> · {formatAmount(ours)} vs {formatAmount(theirs)}
+      <p className={`verdict ${verdict}`}>
+        {t('odds')}: <strong>{t(verdict)}</strong> ·{' '}
+        {t('vsLine', { a: formatAmount(ours), b: formatAmount(theirs) })}
       </p>
-      <p className="muted">Counters win battles: Shieldwall › Berserkers › Archers › Shieldwall.</p>
-      <button className="primary" disabled={sumCounts(send) === 0} onClick={attack} data-testid="attack">
-        Attack
+      <p className="muted">{t('counters')}</p>
+      <button
+        className="primary"
+        disabled={sumCounts(send) === 0}
+        onClick={attack}
+        data-testid="attack"
+        data-hint="attack"
+      >
+        {t('attack')}
       </button>
     </section>
   );
@@ -365,14 +372,12 @@ const TYPE_ORDER: TroopType[] = ['shieldwall', 'berserker', 'archer'];
 export function ReportView({ report, onClose }: { report: BattleReport; onClose: () => void }) {
   return (
     <section className="card panel report" data-testid="report" role="dialog" aria-label={report.title}>
-      <button className="close" onClick={onClose} aria-label="Close">
+      <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
-      <p className={`banner ${report.won ? 'won' : 'lost'}`}>{report.won ? 'Victory' : 'Defeat'}</p>
+      <p className={`banner ${report.won ? 'won' : 'lost'}`}>{report.won ? t('victory') : t('defeat')}</p>
       <h2>{report.title.split(' · ')[1]}</h2>
-      <p className="norse">
-        Barrow level {report.level} · {report.rounds} rounds
-      </p>
+      <p className="norse">{t('rounds', { l: report.level, r: report.rounds })}</p>
       <div className="saga">
         {report.saga.map((line, i) => (
           <p key={i}>{line}</p>
@@ -381,10 +386,10 @@ export function ReportView({ report, onClose }: { report: BattleReport; onClose:
       <table className="losses">
         <thead>
           <tr>
-            <th>Your warriors</th>
-            <th>Sent</th>
-            <th>Fell</th>
-            <th>Wounded</th>
+            <th>{t('yourWarriors')}</th>
+            <th>{t('sent')}</th>
+            <th>{t('fell')}</th>
+            <th>{t('wounded')}</th>
           </tr>
         </thead>
         <tbody>
@@ -393,7 +398,7 @@ export function ReportView({ report, onClose }: { report: BattleReport; onClose:
             .map((l) => (
               <tr key={l.unit}>
                 <td>
-                  <TroopTypeIcon type={l.type} size={14} /> {l.name}
+                  <TroopTypeIcon type={l.type} size={14} /> {troopName(l.unit, l.name)}
                 </td>
                 <td>{l.start}</td>
                 <td>{l.dead}</td>
@@ -403,9 +408,9 @@ export function ReportView({ report, onClose }: { report: BattleReport; onClose:
         </tbody>
         <thead>
           <tr>
-            <th>The dead</th>
-            <th>Rose</th>
-            <th>Fell</th>
+            <th>{t('theDead')}</th>
+            <th>{t('rose')}</th>
+            <th>{t('fell')}</th>
             <th />
           </tr>
         </thead>
@@ -413,7 +418,7 @@ export function ReportView({ report, onClose }: { report: BattleReport; onClose:
           {report.defender.map((l) => (
             <tr key={l.unit}>
               <td>
-                <TroopTypeIcon type={l.type} size={14} /> {l.name}
+                <TroopTypeIcon type={l.type} size={14} /> {troopName(l.unit, l.name)}
               </td>
               <td>{l.start}</td>
               <td>{l.dead}</td>
@@ -436,20 +441,19 @@ export function ReportsPanel({
   onClose: () => void;
 }) {
   return (
-    <section className="card panel" data-testid="reports" role="dialog" aria-label="Sagas">
-      <button className="close" onClick={onClose} aria-label="Close">
+    <section className="card panel" data-testid="reports" role="dialog" aria-label={t('sagas')}>
+      <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
-      <h2>Sagas</h2>
-      <p className="norse">Your battle reports</p>
-      {state.reports.length === 0 && <p className="muted">No battles yet. The barrow waits.</p>}
+      <h2>{t('sagas')}</h2>
+      {state.reports.length === 0 && <p className="muted">{t('noBattles')}</p>}
       <ul className="report-list">
         {state.reports.map((r) => (
           <li key={r.id}>
             <button className={`report-item ${r.read ? '' : 'unread'}`} onClick={() => onOpen(r.id)}>
-              <span className={r.won ? 'won' : 'lost'}>{r.won ? 'Victory' : 'Defeat'}</span>
+              <span className={r.won ? 'won' : 'lost'}>{r.won ? t('victory') : t('defeat')}</span>
               <span>{r.title.split(' · ')[1]}</span>
-              <small>Level {r.level}</small>
+              <small>{t('level', { n: r.level })}</small>
             </button>
           </li>
         ))}

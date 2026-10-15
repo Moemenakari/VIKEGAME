@@ -264,6 +264,11 @@ export class HoldScene {
     return target.copy(slot.group.position).setY(slot.group.position.y + slot.labelHeight);
   }
 
+  /** Snowfall on or off (player setting). */
+  setSnow(on: boolean): void {
+    this.snow.points.visible = on;
+  }
+
   update(time: number, camera: THREE.Camera, focus: THREE.Vector3): void {
     this.sky.position.copy(camera.position);
     this.water.update(time);
