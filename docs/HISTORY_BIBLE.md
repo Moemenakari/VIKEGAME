@@ -60,6 +60,21 @@ so do we. Every historical element in the game should trace back to a row here.
 | Old Norse **skáli** (hall), **bær** (farm), **viðr** (wood), **kaupangr** (market town) | Building names in the game |
 | **Bog-iron smelting sites** | The **Bog-iron Smelter**: Norse iron came from bog ore |
 
+### Added with the army, walls and raids (D-035–D-038)
+
+| Source | Used for |
+|---|---|
+| **Anglo-Saxon Chronicle, 866**: the Great Army "were there horsed" in East Anglia | **Riders** and the **Stable** (*hesthús*, "horse-house") |
+| ***Hrólfs saga kraka*** (legend): Bǫðvarr Bjarki fights as a great bear | **War bears** and the **Bear Den** (*híði*, a bear's lair). Marked *legend* |
+| **Abbo of Saint-Germain, *Bella Parisiacae urbis*** (the siege of Paris, 885–886): rams and siege engines | **Siege engines** and the **Siege Workshop** |
+| ***Skíðgarðr***, a fence of split timber (Old Norse) | **Palisade** (Wall 1) |
+| **Danevirke** (*Danavirki*) and the **Trelleborg** ramparts: *virki* = fortification | **Ring Rampart** (Wall 2) |
+| ***Naust***: boathouses for laying up ships, found all along the Norwegian coast | **Boathouse** |
+| **Heimskringla, *Hákonar saga góða***: beacon fires on the hills to warn of fleets | The **beacon warning** before a raid, and the practice-raid button |
+| ***Höfðingi*** (chieftain), *setr* (seat) | **Jarl's House** |
+| *Sendiboði* (messenger, envoy) | **Envoys' House** |
+| **Eiríkr the Victorious** (Adam of Bremen), **Haraldr Bluetooth** (Jelling stones), **Hákon Jarl** (Heimskringla), **Óláfr Cuarán** (Irish annals) | AI kings of realms 1–4 until players win the Thing |
+
 ## 3. Things we deliberately leave out
 - **Slavery** (thralls were real, but we leave them out).
 - Real religious sites as raid targets. Monsters and rivals are the enemies.

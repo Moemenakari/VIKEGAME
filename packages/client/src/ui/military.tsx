@@ -20,7 +20,7 @@ import {
   type Cost,
   type GameState,
   type ResourceId,
-  type TroopType,
+  type UnitType,
 } from '@jarlheim/sim';
 import { useState } from 'react';
 import type { GameStore } from '../game/store';
@@ -367,7 +367,16 @@ export function BarrowPanel({
 
 // ---- battle reports --------------------------------------------------------------
 
-const TYPE_ORDER: TroopType[] = ['shieldwall', 'berserker', 'archer'];
+const TYPE_ORDER: UnitType[] = [
+  'wall',
+  'ship',
+  'shieldwall',
+  'bear',
+  'berserker',
+  'cavalry',
+  'archer',
+  'siege',
+];
 
 export function ReportView({ report, onClose }: { report: BattleReport; onClose: () => void }) {
   return (
@@ -377,12 +386,26 @@ export function ReportView({ report, onClose }: { report: BattleReport; onClose:
       </button>
       <p className={`banner ${report.won ? 'won' : 'lost'}`}>{report.won ? t('victory') : t('defeat')}</p>
       <h2>{report.title.split(' · ')[1]}</h2>
-      <p className="norse">{t('rounds', { l: report.level, r: report.rounds })}</p>
+      <p className="norse">
+        {report.kind === 'raid'
+          ? `⚔ ${t('raids')} #${report.level}`
+          : t('rounds', { l: report.level, r: report.rounds })}
+      </p>
       <div className="saga">
         {report.saga.map((line, i) => (
           <p key={i}>{line}</p>
         ))}
       </div>
+      {report.loot && Object.keys(report.loot).length > 0 && (
+        <p className="stat warn-text">
+          {t('loot')}: <CostLine cost={report.loot} />
+        </p>
+      )}
+      {report.kind === 'raid' && Object.keys(report.reward).length > 0 && (
+        <p className="stat">
+          {t('salvage')}: <CostLine cost={report.reward} />
+        </p>
+      )}
       <table className="losses">
         <thead>
           <tr>

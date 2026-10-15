@@ -9,6 +9,9 @@ import {
   storageCap,
   upgradeCost,
   upgradeDurationMs,
+  suggestSpot,
+  protectedAmount,
+  wallStrength,
   type BuildingType,
   type Command,
   type GameState,
@@ -22,9 +25,14 @@ import { HealSection, TrainSection } from './military';
 interface Props {
   store: GameStore;
   state: GameState;
-  plotId: string;
+  /** A building id, or null for the build menu. */
+  plotId: string | null;
   onClose: () => void;
   onError: (message: string) => void;
+  /** Build menu: the player picked a type to place. */
+  onChoose: (type: BuildingType) => void;
+  /** Building panel: pick the building up to move it. */
+  onMove: (id: string) => void;
 }
 
 /** Asks the pure sim whether a command would work right now, without changing anything. */
@@ -46,16 +54,16 @@ function Cost({ cost, state }: { cost: ReturnType<typeof upgradeCost>; state: Ga
   );
 }
 
-export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
+export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, onMove }: Props) {
   const now = store.now();
-  const building = state.buildings[plotId];
+  const building = plotId ? state.buildings[plotId] : undefined;
   const run = (cmd: Command, close = false) => {
     const err = store.dispatch(cmd);
     if (err) onError(err.message);
     else if (close) onClose();
   };
 
-  // ---- an open plot: choose what to build -----------------------------------
+  // ---- the build menu: choose what to raise, then place it -----------------
   if (!building) {
     const options = BUILDING_TYPES.filter((t) => t !== 'greatHall');
     return (
@@ -68,14 +76,16 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
         <ul className="build-list">
           {options.map((type: BuildingType) => {
             const def = BUILDINGS[type];
-            const cmd: Command = { type: 'build', plotId, building: type };
-            const blocked = check(state, cmd, now);
+            const spot = suggestSpot(state, type);
+            const cmd: Command = { type: 'build', building: type, ...(spot ?? { x: 0, z: 0 }) };
+            const blocked =
+              check(state, cmd, now) ?? (spot ? null : 'No free ground: upgrade the Great Hall');
             return (
               <li key={type}>
                 <button
                   className="build-option"
                   disabled={blocked !== null}
-                  onClick={() => run(cmd, true)}
+                  onClick={() => onChoose(type)}
                   data-testid={`build-${type}`}
                   data-hint={`build-${type}`}
                 >
@@ -85,7 +95,7 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
                   <span className="desc">{blocked ? errorText(blocked) : bDesc(type)}</span>
                   <span className="meta">
                     <Cost cost={upgradeCost(type, 1)} state={state} />
-                    <span className="time">⏱ {formatDuration(upgradeDurationMs(type, 1))}</span>
+                    <span className="time">⏱ {formatDuration(upgradeDurationMs(type, 1, state))}</span>
                   </span>
                 </button>
               </li>
@@ -127,6 +137,12 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
       )}
       {def.woundedCapacity && building.level > 0 && <HealSection state={state} now={now} run={run} />}
       {def.storage && <p className="stat">{t('storageEach', { n: formatAmount(storageCap(state).food) })}</p>}
+      {def.protect && building.level > 0 && (
+        <p className="stat">🔒 {t('hidden', { n: formatAmount(protectedAmount(state)) })}</p>
+      )}
+      {def.wall && building.level > 0 && (
+        <RaidSection state={state} now={now} onCall={() => run({ type: 'callRaid' })} />
+      )}
 
       {job && left !== null ? (
         <div className="progress-block">
@@ -160,7 +176,7 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
         <div className="upgrade-block">
           <div className="meta">
             <Cost cost={upgradeCost(building.type, next)} state={state} />
-            <span className="time">⏱ {formatDuration(upgradeDurationMs(building.type, next))}</span>
+            <span className="time">⏱ {formatDuration(upgradeDurationMs(building.type, next, state))}</span>
           </div>
           {blocked && <p className="blocked">{errorText(blocked)}</p>}
           <button
@@ -174,6 +190,34 @@ export function PlotPanel({ store, state, plotId, onClose, onError }: Props) {
           </button>
         </div>
       )}
+      {building.id !== 'hall' && (
+        <button className="secondary" onClick={() => onMove(building.id)} data-testid="move">
+          ✥ {t('move')}
+        </button>
+      )}
     </section>
+  );
+}
+
+/** The watch on the wall: when the next raiders come, and a beacon to call them now (practice). */
+export function RaidSection({ state, now, onCall }: { state: GameState; now: number; onCall: () => void }) {
+  const incoming = state.raid.incoming;
+  return (
+    <div className="section">
+      <h3>⚔ {t('raids')}</h3>
+      <p className="stat">🛡 {t('wallPower', { n: formatAmount(wallStrength(state)) })}</p>
+      {incoming ? (
+        <p className="stat warn-text">
+          ⚠ {t('raidIn', { t: formatDuration(Math.max(0, incoming.landsAt - now)) })}
+        </p>
+      ) : state.raid.nextAt ? (
+        <p className="stat">⏱ {t('nextRaid', { t: formatDuration(Math.max(0, state.raid.nextAt - now)) })}</p>
+      ) : (
+        <p className="muted">{t('raidsLater')}</p>
+      )}
+      <button className="secondary" disabled={!!incoming} onClick={onCall} data-testid="call-raid">
+        🔥 {t('callRaid')}
+      </button>
+    </div>
   );
 }

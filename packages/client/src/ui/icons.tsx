@@ -1,3 +1,5 @@
+import type { UnitType } from '@jarlheim/sim';
+
 /** Small inline SVG icons for the HUD (no icon font, no extra download). */
 type IconProps = { size?: number };
 
@@ -74,40 +76,85 @@ export const ResourceIcon = ({ res, size = 18 }: { res: keyof typeof BY_RESOURCE
   return <Icon size={size} />;
 };
 
-/** Troop-type marks: round shield (Shieldwall), bearded axe (Berserker), yew bow (Archer). */
-export const TroopTypeIcon = ({
-  type,
-  size = 18,
-}: {
-  type: 'shieldwall' | 'berserker' | 'archer';
-  size?: number;
-}) => {
-  if (type === 'shieldwall') {
-    return svg(
-      size,
-      <g>
-        <circle cx="12" cy="12" r="9" fill="#a83a2c" stroke="#e9e1cf" strokeWidth="1.5" />
-        <circle cx="12" cy="12" r="2.6" fill="#c9c4b8" />
-      </g>,
-    );
+/** Unit marks: shield, axe, bow, horse, bear paw, ram, ship and wall. */
+export const TroopTypeIcon = ({ type, size = 18 }: { type: UnitType; size?: number }) => {
+  switch (type) {
+    case 'shieldwall':
+      return svg(
+        size,
+        <g>
+          <circle cx="12" cy="12" r="9" fill="#a83a2c" stroke="#e9e1cf" strokeWidth="1.5" />
+          <circle cx="12" cy="12" r="2.6" fill="#c9c4b8" />
+        </g>,
+      );
+    case 'berserker':
+      return svg(
+        size,
+        <g>
+          <rect x="11" y="3" width="2" height="18" rx="1" fill="#9a6a3a" />
+          <path d="M13 4c5 0 7 3 7 6-2-1-4-1-7 0z" fill="#c9d0d6" />
+        </g>,
+      );
+    case 'archer':
+      return svg(
+        size,
+        <g fill="none" strokeLinecap="round">
+          <path d="M7 3c8 4 8 14 0 18" stroke="#c48a4a" strokeWidth="2.2" />
+          <path d="M7 3v18" stroke="#e9e1cf" strokeWidth="1" />
+          <path d="M4 12h15M16 9l3 3-3 3" stroke="#c9d0d6" strokeWidth="1.6" />
+        </g>,
+      );
+    case 'cavalry':
+      return svg(
+        size,
+        <path
+          d="M6 21l1-7c-2-1-3-4-1-7l4-3 1 2 4-1c3 1 5 4 5 7l-2 1-3-2-2 3 1 7z"
+          fill="#a0704a"
+          stroke="#e9e1cf"
+          strokeWidth="1"
+        />,
+      );
+    case 'bear':
+      return svg(
+        size,
+        <g fill="#6a4a32">
+          <ellipse cx="12" cy="15" rx="5.5" ry="4.5" />
+          <circle cx="6" cy="9" r="2" />
+          <circle cx="10" cy="6.5" r="2" />
+          <circle cx="14" cy="6.5" r="2" />
+          <circle cx="18" cy="9" r="2" />
+        </g>,
+      );
+    case 'siege':
+      return svg(
+        size,
+        <g>
+          <rect x="3" y="9" width="16" height="4" rx="2" fill="#9a6a3a" />
+          <rect x="18" y="8" width="3" height="6" rx="1" fill="#8a9098" />
+          <circle cx="7" cy="17" r="3" fill="#5a3a1e" stroke="#e9e1cf" />
+          <circle cx="15" cy="17" r="3" fill="#5a3a1e" stroke="#e9e1cf" />
+        </g>,
+      );
+    case 'ship':
+      return svg(
+        size,
+        <g>
+          <path d="M2 15h20c-2 4-5 5-10 5S4 19 2 15z" fill="#7a5236" />
+          <path d="M12 3v12" stroke="#5a3a1e" strokeWidth="1.4" />
+          <path d="M12 4l7 8h-7z" fill="#a83a2c" />
+          <path d="M2 15l-1-3M22 15l1-3" stroke="#5a3a1e" strokeWidth="1.4" />
+        </g>,
+      );
+    case 'wall':
+      return svg(
+        size,
+        <g fill="#8a6446">
+          {[3, 7, 11, 15, 19].map((x) => (
+            <path key={x} d={`M${x} 21V8l1.5-3L${x + 3} 8v13z`} />
+          ))}
+        </g>,
+      );
   }
-  if (type === 'berserker') {
-    return svg(
-      size,
-      <g>
-        <rect x="11" y="3" width="2" height="18" rx="1" fill="#9a6a3a" />
-        <path d="M13 4c5 0 7 3 7 6-2-1-4-1-7 0z" fill="#c9d0d6" />
-      </g>,
-    );
-  }
-  return svg(
-    size,
-    <g fill="none" strokeLinecap="round">
-      <path d="M7 3c8 4 8 14 0 18" stroke="#c48a4a" strokeWidth="2.2" />
-      <path d="M7 3v18" stroke="#e9e1cf" strokeWidth="1" />
-      <path d="M4 12h15M16 9l3 3-3 3" stroke="#c9d0d6" strokeWidth="1.6" />
-    </g>,
-  );
 };
 
 // ---- HUD buttons (icons instead of words: owner request) --------------------------

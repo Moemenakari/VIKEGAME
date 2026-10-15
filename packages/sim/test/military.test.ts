@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  plotSpot,
   DRAUGR_BANDS,
   MILITARY,
   TROOPS,
@@ -32,10 +33,10 @@ function must(state: GameState, cmd: Command, now = T0): GameState {
 function militaryHold(): GameState {
   const s = newGame(7, T0);
   s.buildings.hall!.level = 5;
-  s.buildings.a3 = { id: 'a3', type: 'shieldYard', level: 5 };
-  s.buildings.a4 = { id: 'a4', type: 'bowyerRange', level: 1 };
-  s.buildings.a5 = { id: 'a5', type: 'wolfLodge', level: 1 };
-  s.buildings.a6 = { id: 'a6', type: 'healersHouse', level: 1 };
+  s.buildings.a3 = { id: 'a3', type: 'shieldYard', level: 5, ...plotSpot('a3') };
+  s.buildings.a4 = { id: 'a4', type: 'bowyerRange', level: 1, ...plotSpot('a4') };
+  s.buildings.a5 = { id: 'a5', type: 'wolfLodge', level: 1, ...plotSpot('a5') };
+  s.buildings.a6 = { id: 'a6', type: 'healersHouse', level: 1, ...plotSpot('a6') };
   s.resources = { food: 99_999, timber: 99_999, iron: 0, silver: 9_999, gold: 100 };
   return s;
 }

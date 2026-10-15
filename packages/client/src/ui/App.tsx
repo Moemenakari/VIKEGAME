@@ -9,6 +9,10 @@ import {
   totalPower,
   troopPower,
   type GameEvent,
+  homeRealm,
+  placementError,
+  suggestSpot,
+  type BuildingType,
   type GameState,
 } from '@jarlheim/sim';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -19,10 +23,8 @@ import { formatAmount, formatDuration } from './format';
 import { routeForDaily, routeForGoal, type Route } from './guide';
 import {
   LANGS,
-  LANG_LABEL,
   bName,
   errorText,
-  getLang,
   goalText,
   questTitle,
   resName,
@@ -62,7 +64,17 @@ declare global {
 
 const realClock = { now: () => Date.now() };
 
-type Panel = 'quests' | 'settings' | 'army' | 'barrow' | 'reports' | 'builders' | 'profile' | null;
+type Panel = 'quests' | 'settings' | 'army' | 'barrow' | 'reports' | 'builders' | 'profile' | 'build' | null;
+
+/** A building being placed (new) or moved (moveId), at a spot measured from the hall. */
+interface Placing {
+  type: BuildingType;
+  level: number;
+  moveId?: string;
+  x: number;
+  z: number;
+  rot: number;
+}
 
 const SNOW_KEY = 'jarlheim.snow';
 function loadSnow(): boolean {
@@ -88,6 +100,10 @@ function describe(e: GameEvent): string | null {
       return t('trainedT', { n: e.count, t: troopName(e.troopId) });
     case 'healing.completed':
       return t('healedN', { n: e.count });
+    case 'raid.spotted':
+      return t('raidWarn', { t: formatDuration(Math.max(0, e.landsAt - Date.now())) });
+    case 'raid.resolved':
+      return e.won ? t('raidBeaten') : t('raidLost');
     default:
       return null;
   }
@@ -156,7 +172,7 @@ function Game({
   const [reportId, setReportId] = useState<number | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [snow, setSnow] = useState(loadSnow);
-  const [showPower, setShowPower] = useState(false);
+  const [placing, setPlacing] = useState<Placing | null>(null);
 
   const select = useCallback((id: string | null) => {
     setReportId(null);
@@ -180,6 +196,7 @@ function Game({
       engine = new Engine(stage, quality, {
         onSelect: select,
         onFirstFrame: () => setReady(true),
+        onPlace: (x, z) => setPlacing((p) => (p ? { ...p, x, z } : p)),
       });
     } catch (err) {
       console.error(err);
@@ -243,6 +260,47 @@ function Game({
     };
   }, [hint, selected, panel]);
 
+  // Placing a building: show the ghost, keep it where the finger puts it, colour it by the rules.
+  const placingKey = placing ? `${placing.type}|${placing.moveId ?? ''}` : '';
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine || !placingKey) return;
+    const p = placingRef.current!;
+    engine.startPlacement(p.type, p.level, store.snapshot, p.moveId);
+    return () => engine.endPlacement();
+  }, [placingKey, store]);
+  const placingRef = useRef(placing);
+  placingRef.current = placing;
+  const placeError = placing
+    ? placementError(state, placing.type, placing.x, placing.z, placing.moveId)
+    : null;
+  useEffect(() => {
+    if (placing) engineRef.current?.setPlacement(placing.x, placing.z, placing.rot, !placeError);
+  }, [placing, placeError]);
+
+  const startPlacing = (type: BuildingType) => {
+    const spot = suggestSpot(state, type) ?? { x: 0, z: 12 };
+    setPanel(null);
+    setSelected(null);
+    engineRef.current?.setSelected(null);
+    setPlacing({ type, level: 1, ...spot, rot: Math.atan2(-spot.x, -spot.z) });
+    engineRef.current?.focusSpot(spot.x, spot.z);
+  };
+  const startMoving = (id: string) => {
+    const b = state.buildings[id];
+    if (!b) return;
+    setSelected(null);
+    engineRef.current?.setSelected(null);
+    setPlacing({ type: b.type, level: b.level, moveId: id, x: b.x, z: b.z, rot: b.rot });
+  };
+  const confirmPlacing = () => {
+    if (!placing) return;
+    const ok = placing.moveId
+      ? run({ type: 'move', buildingId: placing.moveId, x: placing.x, z: placing.z, rot: placing.rot })
+      : run({ type: 'build', building: placing.type, x: placing.x, z: placing.z, rot: placing.rot });
+    if (ok) setPlacing(null);
+  };
+
   const onError = (message: string) => setToast(errorText(message));
   const run = (cmd: Parameters<GameStore['dispatch']>[0]) => {
     const err = store.dispatch(cmd);
@@ -266,8 +324,14 @@ function Game({
   /** Follows a quest arrow: glide to the place, open it, and make the right button pulse. */
   const go = (route: Route | null) => {
     if (!route) return setToast(t('noPlot'));
-    engineRef.current?.focusOn(route.target);
-    select(route.target);
+    setPlacing(null);
+    if (route.target === 'build') {
+      openPanel('build');
+      setPanel('build');
+    } else {
+      engineRef.current?.focusOn(route.target);
+      select(route.target);
+    }
     setHint(route.hint);
   };
 
@@ -280,7 +344,6 @@ function Game({
   const unread = state.reports.filter((r) => !r.read).length;
   const warriors = sumCounts(state.army.troops);
   const power = totalPower(state);
-  const armyPower = troopPower(state);
 
   return (
     <div className="app">
@@ -300,40 +363,11 @@ function Game({
             </span>
           </span>
         </button>
-        <button
-          className="power-more"
-          onClick={() => setShowPower(!showPower)}
-          aria-label={t('power')}
-          data-testid="power-more"
-        >
-          ▾
-        </button>
         <div className="gold" title={resName('gold')}>
           <GoldIcon size={16} />
           <span data-testid="gold">{formatAmount(state.resources.gold)}</span>
         </div>
-        <button
-          className="lang"
-          onClick={() => setLang(LANGS[(LANGS.indexOf(getLang()) + 1) % LANGS.length]!)}
-          aria-label={t('language')}
-          data-testid="lang-button"
-        >
-          {LANG_LABEL[lang]}
-        </button>
       </header>
-      {showPower && (
-        <div className="power-split" data-testid="power-split" onClick={() => setShowPower(false)}>
-          <span>
-            🏠 {t('buildPower')} <b>{formatAmount(power - armyPower)}</b>
-          </span>
-          <span>
-            ⚔ {t('armyPower')} <b>{formatAmount(armyPower)}</b>
-          </span>
-          <span>
-            🛡 {t('heroPower')} <b>0</b>
-          </span>
-        </div>
-      )}
       <div className="resources" data-testid="resources">
         {PRODUCED_RESOURCES.map((r) => {
           const full = state.resources[r] >= caps[r];
@@ -407,14 +441,59 @@ function Game({
         ))}
       </aside>
 
-      {selected && selected !== 'longship' && (
+      {((selected && selected !== 'longship') || panel === 'build') && !placing && (
         <PlotPanel
           store={store}
           state={state}
-          plotId={selected}
-          onClose={() => select(null)}
+          plotId={panel === 'build' ? null : selected}
+          onClose={() => (panel === 'build' ? setPanel(null) : select(null))}
           onError={onError}
+          onChoose={startPlacing}
+          onMove={startMoving}
         />
+      )}
+      {placing && (
+        <div className="place-bar" data-testid="place-bar">
+          <p className={placeError ? 'bad' : ''}>
+            {bName(placing.type)} · {placeError ? errorText(placeError) : t('dragHint')}
+          </p>
+          <div className="place-buttons">
+            <button onClick={() => setPlacing(null)} aria-label={t('cancel')} data-testid="place-cancel">
+              ✕
+            </button>
+            <button
+              onClick={() => setPlacing({ ...placing, rot: placing.rot + Math.PI / 4 })}
+              aria-label={t('rotate')}
+              data-testid="place-rotate"
+            >
+              ⟳
+            </button>
+            <button
+              className="ok"
+              disabled={!!placeError}
+              onClick={confirmPlacing}
+              aria-label={t('place')}
+              data-testid="place-ok"
+            >
+              ✓
+            </button>
+          </div>
+        </div>
+      )}
+      {state.raid.incoming && !placing && (
+        <button
+          className="raid-banner"
+          data-testid="raid-banner"
+          onClick={() => {
+            const wall = Object.values(state.buildings).find(
+              (b) => b.type === 'palisade' || b.type === 'rampart',
+            );
+            if (wall) go({ target: wall.id, hint: 'call-raid' });
+            else openPanel('army');
+          }}
+        >
+          {t('raidWarn', { t: formatDuration(Math.max(0, state.raid.incoming.landsAt - store.now())) })}
+        </button>
       )}
       {selected === 'longship' && (
         <section className="card panel" data-testid="info-card" role="dialog" aria-label={t('longship')}>
@@ -471,7 +550,13 @@ function Game({
         />
       )}
       {panel === 'profile' && (
-        <ProfilePanel state={state} run={run} onClose={() => setPanel(null)} toast={setToast} />
+        <ProfilePanel
+          state={state}
+          run={run}
+          onClose={() => setPanel(null)}
+          toast={setToast}
+          onSettings={() => setPanel('settings')}
+        />
       )}
       {panel === 'settings' && (
         <SettingsPanel
@@ -501,7 +586,7 @@ function Game({
       )}
 
       {/* ---- the guide bar: always one clear next step ---- */}
-      {main && !selected && !panel && !report && (
+      {main && !selected && !panel && !report && !placing && (
         <div className={`guide ${main.done ? 'ready' : ''}`} data-testid="guide">
           <button
             className="guide-text"
@@ -538,6 +623,9 @@ function Game({
       )}
 
       <nav className="bottombar">
+        <button onClick={() => openPanel('build')} aria-label={t('build')} data-testid="build-button">
+          <BuilderIcon size={26} />
+        </button>
         <button onClick={() => setToast(t('heroesSoon'))} aria-label={t('heroes')}>
           <HeroIcon size={26} />
         </button>
@@ -624,13 +712,18 @@ function ProfilePanel({
   run,
   onClose,
   toast,
+  onSettings,
 }: {
   state: GameState;
   run: (cmd: Parameters<GameStore['dispatch']>[0]) => boolean;
   onClose: () => void;
   toast: (m: string) => void;
+  onSettings: () => void;
 }) {
   const [name, setName] = useState(state.profile.name);
+  const power = totalPower(state);
+  const army = troopPower(state);
+  const realm = homeRealm();
   return (
     <section className="card panel" data-testid="profile" role="dialog" aria-label={t('profile')}>
       <button className="close" onClick={onClose} aria-label={t('close')}>
@@ -657,6 +750,37 @@ function ProfilePanel({
           </button>
         </form>
       </div>
+      <dl className="profile-stats">
+        <div>
+          <dt>⚔ {t('power')}</dt>
+          <dd data-testid="profile-power">{power.toLocaleString('en-US')}</dd>
+        </div>
+        <div>
+          <dt>🏠 {t('buildPower')}</dt>
+          <dd>{formatAmount(power - army)}</dd>
+        </div>
+        <div>
+          <dt>🛡 {t('armyPower')}</dt>
+          <dd>{formatAmount(army)}</dd>
+        </div>
+        <div>
+          <dt>✦ {t('heroPower')}</dt>
+          <dd>0</dd>
+        </div>
+        <div>
+          <dt>🌍 {t('server')}</dt>
+          <dd data-testid="profile-server">
+            #{realm.id} {realm.name}
+          </dd>
+        </div>
+        <div>
+          <dt>👑 {t('king')}</dt>
+          <dd data-testid="profile-king">{realm.king}</dd>
+        </div>
+      </dl>
+      <button className="secondary" onClick={onSettings} data-testid="open-settings">
+        <GearIcon size={18} /> {t('settings')}
+      </button>
       <h3>{t('pictures')}</h3>
       <div className="avatar-grid">
         {AVATARS.map((a) => {

@@ -1,15 +1,19 @@
 import type { BuildingType } from './data/buildings';
 import { ECONOMY } from './data/economy';
-import { HALL_PLOT_ID } from './data/plots';
+import { HALL_PLOT_ID, PLOTS } from './data/plots';
 import type { Cost, Resources } from './data/resources';
-import type { TroopType } from './data/troops';
+import type { UnitType } from './data/troops';
 
-/** One building on one plot. Its id is the plot id (one building per plot). */
+/** One building, standing where the player put it (D-036). */
 export interface Building {
   id: string;
   type: BuildingType;
   /** 0 while the first construction is still running. */
   level: number;
+  /** Position measured from the centre of the Great Hall (world units), and facing (radians). */
+  x: number;
+  z: number;
+  rot: number;
 }
 
 export interface ConstructionJob {
@@ -37,7 +41,7 @@ export interface HealingJob {
 export interface ReportLine {
   unit: string;
   name: string;
-  type: TroopType;
+  type: UnitType;
   start: number;
   /** Fell for good. */
   dead: number;
@@ -48,7 +52,8 @@ export interface ReportLine {
 export interface BattleReport {
   id: number;
   at: number;
-  kind: 'draugr';
+  kind: 'draugr' | 'raid';
+  /** Barrow level, or the raid number. */
   level: number;
   title: string;
   won: boolean;
@@ -58,7 +63,30 @@ export interface BattleReport {
   /** The battle told as a short saga (generated, our own words). */
   saga: string[];
   reward: Cost;
+  /** Resources the raiders carried off (raids you lost). */
+  loot?: Cost;
   read: boolean;
+}
+
+/** A raiding fleet on its way (spotted by the beacon). */
+export interface IncomingRaid {
+  variant: string;
+  /** Raid number (difficulty grows with it). */
+  number: number;
+  ships: Record<string, number>;
+  crew: Record<string, number>;
+  spottedAt: number;
+  landsAt: number;
+  /** Called by the player to practise: no salvage, and it does not raise the difficulty. */
+  practice: boolean;
+}
+
+export interface RaidState {
+  /** When the next fleet lands (null until raids begin). */
+  nextAt: number | null;
+  /** Raids fought so far (not counting practice). */
+  count: number;
+  incoming: IncomingRaid | null;
 }
 
 export interface DailyQuestState {
@@ -107,9 +135,12 @@ export interface GameState {
   profile: PlayerProfile;
   /** Index of the current step in the main quest line. */
   mainQuest: number;
+  /** Next id for a new building ("b1", "b2"...). */
+  nextBuildingId: number;
+  raid: RaidState;
 }
 
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
@@ -122,15 +153,28 @@ export function newGame(seed: number, now: number): GameState {
     lastTick: now,
     resources: { ...ECONOMY.startingResources },
     buildings: {
-      [HALL_PLOT_ID]: { id: HALL_PLOT_ID, type: 'greatHall', level: 1 },
-      a1: { id: 'a1', type: 'farmstead', level: 1 },
-      a2: { id: 'a2', type: 'woodcutter', level: 1 },
+      [HALL_PLOT_ID]: { id: HALL_PLOT_ID, type: 'greatHall', level: 1, ...plotSpot(HALL_PLOT_ID) },
+      a1: { id: 'a1', type: 'farmstead', level: 1, ...plotSpot('a1') },
+      a2: { id: 'a2', type: 'woodcutter', level: 1, ...plotSpot('a2') },
     },
     queue: [],
     quests: { day: dayIndex(now), progress: {}, claimed: [], chests: [] },
     ...emptyMilitary(seed),
     ...freshProfile(),
+    ...freshRaids(),
   };
+}
+
+/** Where the old fixed plots were: used for the starting buildings and to upgrade old saves. */
+export function plotSpot(id: string): { x: number; z: number; rot: number } {
+  if (id === HALL_PLOT_ID) return { x: 0, z: 0, rot: 0.12 };
+  const p = PLOTS.find((q) => q.id === id);
+  return p ? { x: p.dx, z: p.dz, rot: p.rotation } : { x: 0, z: 12, rot: 0 };
+}
+
+/** Fields added in save version 4: free placement and sea raids. */
+export function freshRaids(): Pick<GameState, 'nextBuildingId' | 'raid'> {
+  return { nextBuildingId: 1, raid: { nextAt: null, count: 0, incoming: null } };
 }
 
 /** Military fields added in save version 2 (M3). Also used to migrate version-1 saves. */

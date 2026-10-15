@@ -21,29 +21,50 @@ test('build, finish, save and claim a quest on a phone', async ({ page }) => {
   await expect(page.getByTestId('info-card')).toContainText('Great Hall');
   await page.getByLabel('Close').click();
 
-  // Tap an open plot and raise a Storehouse (2 taps).
-  await tapPlot(page, 'a3');
+  // Build button → Storehouse → place it where it stands (3 taps).
+  await page.getByTestId('build-button').click();
   await expect(page.getByTestId('build-menu')).toBeVisible();
   await page.screenshot({ path: 'test-results/build-menu.png' });
   await page.getByTestId('build-storehouse').click();
-  await expect(page.getByTestId('build-menu')).toBeHidden();
+  await expect(page.getByTestId('place-bar')).toBeVisible();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'test-results/placing.png' });
+  await page.getByTestId('place-ok').click();
   await expect
-    .poll(() => page.evaluate(() => window.__jarlheim!.state().buildings.a3?.type))
+    .poll(() => page.evaluate(() => window.__jarlheim!.state().buildings.b1?.type))
     .toBe('storehouse');
   await expect(page.getByTestId('builders')).toContainText('1/2');
   await page.waitForTimeout(600);
   await page.screenshot({ path: 'test-results/construction.png' });
 
   // Finish it for free (under 5 minutes left).
-  await tapPlot(page, 'a3');
+  await tapPlot(page, 'b1');
   await page.getByTestId('finish-free').click();
-  await expect.poll(() => page.evaluate(() => window.__jarlheim!.state().buildings.a3?.level)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__jarlheim!.state().buildings.b1?.level)).toBe(1);
+
+  // Pick it up and move it: tap the ground somewhere else, then confirm.
+  await tapPlot(page, 'b1');
+  await page.getByTestId('move').click();
+  const before = await page.evaluate(() => window.__jarlheim!.state().buildings.b1!);
+  const hall = await page.evaluate(() => window.__jarlheim!.screenPositionOf('hall'));
+  const farm = await page.evaluate(() => window.__jarlheim!.screenPositionOf('b1'));
+  await page.mouse.click(farm.x + (hall.x - farm.x) * 0.35, farm.y + (hall.y - farm.y) * 0.35 + 40);
+  await page.waitForTimeout(300);
+  if (await page.getByTestId('place-ok').isEnabled()) {
+    await page.getByTestId('place-ok').click();
+    await expect
+      .poll(() => page.evaluate(() => window.__jarlheim!.state().buildings.b1!.x))
+      .not.toBe(before.x);
+  } else {
+    await page.getByTestId('place-cancel').click();
+  }
+  await expect(page.getByTestId('place-bar')).toBeHidden();
 
   // Progress survives a reload (one save record in IndexedDB).
   await page.waitForTimeout(2000);
   await page.reload();
   await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
-  expect(await page.evaluate(() => window.__jarlheim!.state().buildings.a3?.level)).toBe(1);
+  expect(await page.evaluate(() => window.__jarlheim!.state().buildings.b1?.level)).toBe(1);
 
   // The free-finish daily quest pays Gold.
   const goldBefore = await page.evaluate(() => window.__jarlheim!.state().resources.gold);
@@ -72,15 +93,17 @@ test('raise a Shield Yard, train warriors and clear the first draugr barrow', as
   await page.getByTestId('finish-free').click();
   await expect.poll(async () => (await state()).buildings.hall?.level).toBe(2);
 
-  // Shield Yard on an open plot.
-  await tapPlot(page, 'a3');
+  // Shield Yard wherever the game suggests.
+  await page.getByTestId('build-button').click();
   await page.getByTestId('build-shieldYard').click();
-  await tapPlot(page, 'a3');
+  await page.getByTestId('place-ok').click();
+  await page.waitForTimeout(1000); // let the camera settle
+  await tapPlot(page, 'b1');
   await page.getByTestId('finish-free').click();
-  await expect.poll(async () => (await state()).buildings.a3?.level).toBe(1);
+  await expect.poll(async () => (await state()).buildings.b1?.level).toBe(1);
 
   // Train 25 levies and finish the batch.
-  await tapPlot(page, 'a3');
+  await tapPlot(page, 'b1');
   await page.getByTestId('train-count').fill('25');
   await page.getByTestId('train').click();
   await page.getByTestId('train-finish-free').click();
@@ -123,9 +146,13 @@ test('the guide arrow leads to the next step, and the language switches to Arabi
   await expect(page.getByTestId('build-shieldYard')).toHaveClass(/pulse/);
   await page.getByLabel('Close').click();
 
-  // One tap switches the whole interface to Arabic, right to left.
-  await page.getByTestId('lang-button').click();
+  // The profile shows power, server and King; the language lives in Settings.
+  await page.getByTestId('profile-button').click();
+  await expect(page.getByTestId('profile-king')).not.toBeEmpty();
+  await page.getByTestId('open-settings').click();
+  await page.getByTestId('lang-ar').click();
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  await page.getByLabel('إغلاق').click();
   await expect(page.getByTestId('guide')).toContainText('القاعة الكبرى');
   await page.screenshot({ path: 'test-results/arabic.png' });
 
@@ -134,5 +161,36 @@ test('the guide arrow leads to the next step, and the language switches to Arabi
   await page.getByTestId('avatar-2').click();
   expect(await page.evaluate(() => window.__jarlheim!.state().profile.avatar)).toBe(2);
 
+  expect(errors).toEqual([]);
+});
+
+test('a palisade, and raiders called by the beacon sail in', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?quality=low');
+  await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
+  const state = () => page.evaluate(() => window.__jarlheim!.state());
+
+  await tapPlot(page, 'hall');
+  await page.getByTestId('upgrade').click();
+  await tapPlot(page, 'hall');
+  await page.getByTestId('finish-free').click();
+  await expect.poll(async () => (await state()).buildings.hall?.level).toBe(2);
+
+  await page.getByTestId('build-button').click();
+  await page.getByTestId('build-palisade').click();
+  await page.getByTestId('place-ok').click();
+  await page.waitForTimeout(1000); // let the camera settle
+  await tapPlot(page, 'b1');
+  await page.getByTestId('finish-free').click();
+  await expect.poll(async () => (await state()).buildings.b1?.level).toBe(1);
+
+  await tapPlot(page, 'b1');
+  await page.getByTestId('call-raid').click();
+  await expect(page.getByTestId('raid-banner')).toBeVisible();
+  await page.getByLabel('Close').click();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: 'test-results/raid.png' });
+  expect((await state()).raid.incoming).not.toBeNull();
   expect(errors).toEqual([]);
 });

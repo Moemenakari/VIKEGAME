@@ -7,6 +7,7 @@ import {
   deserialize,
   generateHoldTerrain,
   newGame,
+  plotSpot,
   sampleHeight,
   serialize,
   slopeAt,
@@ -21,14 +22,14 @@ describe('daily quests', () => {
     for (const plotId of ['a3', 'a4', 'a5']) {
       const r = apply(
         s,
-        { type: 'build', plotId, building: plotId === 'a3' ? 'storehouse' : 'farmstead' },
+        { type: 'build', building: plotId === 'a3' ? 'storehouse' : 'farmstead', ...plotSpot(plotId) },
         T0,
       );
       if (r.ok) s = r.state;
       else {
         // Out of builders: wait for the first jobs to finish, then continue.
         s = advance(s, T0 + HOUR).state;
-        const again = apply(s, { type: 'build', plotId, building: 'farmstead' }, T0 + HOUR);
+        const again = apply(s, { type: 'build', building: 'farmstead', ...plotSpot(plotId) }, T0 + HOUR);
         if (!again.ok) throw new Error(again.error.message);
         s = again.state;
       }
@@ -69,7 +70,7 @@ describe('daily quests', () => {
 describe('save files', () => {
   it('round-trip the whole game in one document', () => {
     let s = newGame(9, T0);
-    const r = apply(s, { type: 'build', plotId: 'a3', building: 'storehouse' }, T0);
+    const r = apply(s, { type: 'build', building: 'storehouse', ...plotSpot('a3') }, T0);
     if (r.ok) s = r.state;
     const text = serialize(s);
     expect(deserialize(text)).toEqual(s);

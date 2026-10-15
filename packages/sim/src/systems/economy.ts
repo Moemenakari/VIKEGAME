@@ -28,10 +28,31 @@ export function upgradeCost(type: BuildingType, toLevel: number): Cost {
   return cost;
 }
 
-/** Milliseconds needed to raise a building to `toLevel`. */
-export function upgradeDurationMs(type: BuildingType, toLevel: number): number {
+/** Sum over finished buildings of `pick(def) × level` (e.g. research or build speed). */
+function perLevelBonus(
+  state: GameState,
+  pick: (def: (typeof BUILDINGS)[BuildingType]) => number | undefined,
+): number {
+  let bonus = 0;
+  for (const b of Object.values(state.buildings)) bonus += (pick(BUILDINGS[b.type]) ?? 0) * b.level;
+  return bonus;
+}
+
+/** Milliseconds needed to raise a building to `toLevel` (faster with a Builders' Lodge when `state` is given). */
+export function upgradeDurationMs(type: BuildingType, toLevel: number, state?: GameState): number {
   const def = BUILDINGS[type];
-  return Math.round(def.baseSeconds * def.timeGrowth ** (toLevel - 1)) * 1000;
+  const speed = state
+    ? Math.min(
+        0.5,
+        perLevelBonus(state, (d) => d.buildSpeedPerLevel),
+      )
+    : 0;
+  return Math.round(def.baseSeconds * def.timeGrowth ** (toLevel - 1) * (1 - speed)) * 1000;
+}
+
+/** Production bonus from the Rune Hall (0.1 = +10 %). */
+export function researchBonus(state: GameState): number {
+  return perLevelBonus(state, (d) => d.researchPerLevel);
 }
 
 export function hallLevel(state: GameState): number {
@@ -40,7 +61,9 @@ export function hallLevel(state: GameState): number {
 
 export function builderSlots(state: GameState): number {
   const hall = hallLevel(state);
-  return ECONOMY.baseBuilders + ECONOMY.extraBuilderAtHall.filter((lvl) => hall >= lvl).length;
+  let lodges = 0;
+  for (const b of Object.values(state.buildings)) if (b.level > 0) lodges += BUILDINGS[b.type].builders ?? 0;
+  return ECONOMY.baseBuilders + ECONOMY.extraBuilderAtHall.filter((lvl) => hall >= lvl).length + lodges;
 }
 
 export function countOfType(state: GameState, type: BuildingType): number {
@@ -59,6 +82,8 @@ export function productionPerHour(state: GameState): Record<ProducedResourceId, 
     const p = BUILDINGS[b.type].produces;
     if (p && b.level > 0) rates[p.resource] += p.perHour * p.growth ** (b.level - 1);
   }
+  const boost = 1 + researchBonus(state);
+  for (const r of PRODUCED_RESOURCES) rates[r] *= boost;
   return rates;
 }
 

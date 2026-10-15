@@ -65,3 +65,17 @@ export function addCounts(into: Record<string, number>, add: Record<string, numb
     else delete into[id];
   }
 }
+
+/** Rough fighting strength of a force (for odds hints and raid sizing; the real fight is simulated). */
+export function armyStrength(stacks: Array<{ atk: number; def: number; hp: number; count: number }>): number {
+  return Math.round(stacks.reduce((s, u) => s + u.count * Math.sqrt(u.atk * (u.hp + u.def * 2)), 0));
+}
+
+/** Strength of the land troops at home (ships excluded). */
+export function homeStrength(troops: Record<string, number>): number {
+  return armyStrength(
+    Object.entries(troops)
+      .filter(([id]) => TROOPS[id] && TROOPS[id].type !== 'ship')
+      .map(([id, count]) => ({ ...TROOPS[id]!, count })),
+  );
+}

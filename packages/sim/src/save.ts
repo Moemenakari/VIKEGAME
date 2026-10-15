@@ -1,6 +1,6 @@
 import { BUILDING_TYPES } from './data/buildings';
 import { RESOURCES } from './data/resources';
-import { STATE_VERSION, emptyMilitary, freshProfile, type GameState } from './state';
+import { STATE_VERSION, emptyMilitary, freshProfile, freshRaids, plotSpot, type GameState } from './state';
 
 /**
  * Save format: the WHOLE game in one JSON document, written and read in one trip
@@ -20,6 +20,13 @@ const migrations: Record<number, (state: Record<string, unknown>) => Record<stri
   2: (state) => {
     const quests = (state.quests ?? {}) as Record<string, unknown>;
     return { ...freshProfile(), ...state, quests: { chests: [], ...quests } };
+  },
+  // v3 → v4: buildings get a free position (where their old plot was), and sea raids begin.
+  3: (state) => {
+    const buildings: Record<string, unknown> = {};
+    for (const [id, b] of Object.entries((state.buildings ?? {}) as Record<string, Record<string, unknown>>))
+      buildings[id] = { ...plotSpot(id), ...b };
+    return { ...freshRaids(), ...state, buildings };
   },
 };
 
@@ -45,6 +52,9 @@ function isGameState(s: unknown): s is GameState {
       !isObj(b) ||
       b.id !== id ||
       !isNum(b.level) ||
+      !isNum(b.x) ||
+      !isNum(b.z) ||
+      !isNum(b.rot) ||
       !(BUILDING_TYPES as readonly unknown[]).includes(b.type)
     ) {
       return false;
@@ -73,7 +83,10 @@ function isGameState(s: unknown): s is GameState {
   if (!Array.isArray(q.chests)) return false;
   const p = s.profile;
   if (!isObj(p) || typeof p.name !== 'string' || !isNum(p.avatar) || !Array.isArray(p.owned)) return false;
+  const raid = s.raid;
+  if (!isObj(raid) || !isNum(raid.count) || !(raid.nextAt === null || isNum(raid.nextAt))) return false;
   return (
+    isNum(s.nextBuildingId) &&
     isNum(s.mainQuest) &&
     isNum(s.nextReportId) &&
     isObj(s.pve) &&

@@ -13,6 +13,9 @@ export interface CameraRigOptions {
   maxDistance: number;
   onTap: (clientX: number, clientY: number) => void;
   onInteract: () => void;
+  /** If this returns true for a press, the finger drags that thing instead of the camera. */
+  grab?: (clientX: number, clientY: number) => boolean;
+  onDrag?: (clientX: number, clientY: number) => void;
 }
 
 const TAP_MAX_MOVE = 8;
@@ -32,6 +35,7 @@ export class CameraRig {
   private pointers = new Map<number, { x: number; y: number }>();
   private pressStart: { id: number; x: number; y: number; t: number; moved: boolean } | null = null;
   private rotating = false;
+  private dragging = false;
 
   constructor(
     private readonly element: HTMLElement,
@@ -111,6 +115,7 @@ export class CameraRig {
     this.element.setPointerCapture(e.pointerId);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     this.rotating = e.button === 2 || e.shiftKey;
+    this.dragging = this.pointers.size === 1 && !!this.opts.grab?.(e.clientX, e.clientY);
     this.pressStart =
       this.pointers.size === 1
         ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), moved: false }
@@ -127,7 +132,9 @@ export class CameraRig {
       if (moved > TAP_MAX_MOVE) this.pressStart.moved = true;
     }
 
-    if (this.pointers.size === 1) {
+    if (this.dragging && this.pointers.size === 1) {
+      this.opts.onDrag?.(e.clientX, e.clientY);
+    } else if (this.pointers.size === 1) {
       const dx = e.clientX - prev.x;
       const dy = e.clientY - prev.y;
       if (this.rotating) this.goalYaw -= dx * 0.008;
@@ -163,6 +170,7 @@ export class CameraRig {
     }
     this.pointers.delete(e.pointerId);
     this.pressStart = null;
+    this.dragging = false;
     this.opts.onInteract();
   };
 

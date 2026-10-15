@@ -1,4 +1,4 @@
-import { generateHoldTerrain, hallLevel, type GameState } from '@jarlheim/sim';
+import { generateHoldTerrain, type BuildingType, type GameState } from '@jarlheim/sim';
 import * as THREE from 'three';
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -14,6 +14,8 @@ import { bName, t } from '../ui/i18n';
 
 export interface EngineCallbacks {
   onSelect: (id: PickId | null) => void;
+  /** While placing: the building was dragged or tapped to a new spot (measured from the hall). */
+  onPlace?: (x: number, z: number) => void;
   onFirstFrame: () => void;
   onFps?: (fps: number) => void;
 }
@@ -48,6 +50,8 @@ export class Engine {
   private selected: string | null = null;
   private readonly tmp = new THREE.Vector3();
   private composer: EffectComposer | null = null;
+  private placing = false;
+  private readonly ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   constructor(
     private readonly container: HTMLElement,
@@ -86,24 +90,17 @@ export class Engine {
       onInteract: () => {
         this.lastInput = performance.now();
       },
+      grab: (x, y) => this.placing && this.hitsGhost(x, y),
+      onDrag: (x, y) => this.placeAt(x, y),
     });
+    this.ground.constant = -terrain.hall.y;
     this.rig.focus(terrain.hall.x, terrain.hall.y, terrain.hall.z + 6);
 
-    // Floating labels above plots (names, levels, timers). Plain DOM, positioned each frame.
+    // Floating labels above buildings (names, levels, timers). Plain DOM, positioned each frame.
     this.labelsRoot = document.createElement('div');
     this.labelsRoot.className = 'labels';
     container.appendChild(this.labelsRoot);
-    for (const id of [...this.hold.slots.keys(), 'barrow']) {
-      const el = document.createElement('div');
-      el.className = 'plot-label';
-      const text = document.createElement('span');
-      const bar = document.createElement('div');
-      bar.className = 'bar';
-      bar.appendChild(document.createElement('i'));
-      el.append(text, bar);
-      this.labelsRoot.appendChild(el);
-      this.labels.set(id, { el, text, bar });
-    }
+    this.addLabel('barrow');
 
     if (quality.postFx !== 'none') this.composer = this.createComposer(pixelRatio);
 
@@ -111,6 +108,20 @@ export class Engine {
     this.resizeObserver.observe(container);
     this.resize();
     document.addEventListener('visibilitychange', this.onVisibility);
+  }
+
+  private addLabel(id: string) {
+    const el = document.createElement('div');
+    el.className = 'plot-label';
+    const text = document.createElement('span');
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.appendChild(document.createElement('i'));
+    el.append(text, bar);
+    this.labelsRoot.appendChild(el);
+    const label = { el, text, bar };
+    this.labels.set(id, label);
+    return label;
   }
 
   start(): void {
@@ -143,7 +154,18 @@ export class Engine {
       this.renderer.shadowMap.needsUpdate = true;
       this.lastInput = performance.now();
     }
-    const hall = hallLevel(state);
+    if (state.raid.incoming || this.raidShown) {
+      this.hold.syncRaid(state.raid.incoming, now);
+      this.raidShown = !!state.raid.incoming;
+      this.lastInput = performance.now();
+    }
+    for (const [id, label] of this.labels) {
+      if (id !== 'barrow' && !state.buildings[id]) {
+        label.el.remove();
+        this.labels.delete(id);
+      }
+    }
+    for (const b of Object.values(state.buildings)) if (!this.labels.has(b.id)) this.addLabel(b.id);
     for (const [id, label] of this.labels) {
       if (id === 'barrow') {
         label.text.textContent = `${t('barrow')} · ${Math.min(state.pve.draugrCleared + 1, 10)}`;
@@ -151,14 +173,10 @@ export class Engine {
         label.bar.style.display = 'none';
         continue;
       }
-      const b = state.buildings[id];
+      const b = state.buildings[id]!;
       const job = state.queue.find((j) => j.buildingId === id);
-      const slot = this.hold.slots.get(id)!;
-      let text = '';
-      if (b) text = b.level > 0 ? `${bName(b.type)} · ${b.level}` : bName(b.type);
-      else if (hall >= slot.unlockHall) text = t('plusBuild');
-      label.text.textContent = text;
-      label.el.dataset.kind = b ? 'building' : text ? 'empty' : 'locked';
+      label.text.textContent = b.level > 0 ? `${bName(b.type)} · ${b.level}` : bName(b.type);
+      label.el.dataset.kind = 'building';
       label.el.classList.toggle('selected', id === this.selected);
       if (job) {
         const total = job.endsAt - job.startedAt;
@@ -172,15 +190,73 @@ export class Engine {
     }
   }
 
+  private raidShown = false;
+
+  // ---- placing --------------------------------------------------------------------
+
+  /** Starts placing (or moving) a building: a ghost follows the finger until confirmed. */
+  startPlacement(type: BuildingType, level: number, state: GameState, moveId?: string): void {
+    this.placing = true;
+    this.hold.showGhost(type, level, state, moveId);
+    const label = moveId ? this.labels.get(moveId) : undefined;
+    if (label) label.el.style.display = 'none';
+    this.lastInput = performance.now();
+  }
+
+  /** Moves the ghost (spot measured from the centre of the hall) and colours its ring. */
+  setPlacement(x: number, z: number, rot: number, ok: boolean): void {
+    this.hold.moveGhost(x, z, rot, ok);
+    this.lastInput = performance.now();
+  }
+
+  endPlacement(): void {
+    this.placing = false;
+    this.hold.hideGhost();
+    for (const label of this.labels.values()) label.el.style.display = '';
+    this.lastInput = performance.now();
+  }
+
+  private rayFrom(clientX: number, clientY: number): void {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(ndc, this.rig.camera);
+  }
+
+  private hitsGhost(clientX: number, clientY: number): boolean {
+    const ghost = this.hold.ghostObject;
+    if (!ghost) return false;
+    this.rayFrom(clientX, clientY);
+    return this.raycaster.intersectObject(ghost, true).length > 0;
+  }
+
+  /** Reports the ground spot under the finger (snapped to half units) while placing. */
+  private placeAt(clientX: number, clientY: number): void {
+    this.rayFrom(clientX, clientY);
+    const p = this.raycaster.ray.intersectPlane(this.ground, this.tmp);
+    if (!p) return;
+    const t = this.hold.terrain;
+    this.callbacks.onPlace?.(Math.round((p.x - t.hall.x) * 2) / 2, Math.round((p.z - t.hall.z) * 2) / 2);
+  }
+
   setSelected(id: string | null): void {
     this.selected = id;
     for (const [lid, label] of this.labels) label.el.classList.toggle('selected', lid === id);
   }
 
-  /** Glides the camera to a plot or the barrow (used by the quest "Go" arrows). */
+  /** Glides the camera to a building or the barrow (used by the quest "Go" arrows). */
   focusOn(id: PickId): void {
     const p = this.hold.anchorOf(id);
     this.rig.glideTo(p.x, p.y, p.z + 6);
+    this.lastInput = performance.now();
+  }
+
+  /** Glides the camera to a spot measured from the hall (used when placing). */
+  focusSpot(x: number, z: number): void {
+    const p = this.hold.worldAt(x, z);
+    this.rig.glideTo(p.x, p.y, p.z + 4);
     this.lastInput = performance.now();
   }
 
@@ -300,12 +376,8 @@ export class Engine {
   }
 
   private pick(clientX: number, clientY: number): void {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.rig.camera);
+    if (this.placing) return this.placeAt(clientX, clientY);
+    this.rayFrom(clientX, clientY);
     const hits = this.raycaster.intersectObjects(this.hold.pickTargets(), false);
     const id = (hits[0]?.object.userData.pickId as PickId | undefined) ?? null;
     this.callbacks.onSelect(id);

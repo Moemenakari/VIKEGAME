@@ -16,4 +16,6 @@ export type GameEvent =
   | { type: 'training.completed'; buildingId: string; troopId: string; count: number }
   | { type: 'healing.started'; count: number }
   | { type: 'healing.completed'; count: number }
-  | { type: 'battle.resolved'; reportId: number; won: boolean; level: number };
+  | { type: 'battle.resolved'; reportId: number; won: boolean; level: number }
+  | { type: 'raid.spotted'; landsAt: number }
+  | { type: 'raid.resolved'; reportId: number; won: boolean };

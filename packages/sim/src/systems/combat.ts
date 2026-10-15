@@ -1,11 +1,11 @@
-import { COUNTERS, MILITARY, TROOP_TYPES, type TroopType } from '../data/troops';
+import { COUNTERS, MILITARY, TROOP_TYPES, type TroopType, type UnitType } from '../data/troops';
 import { nextFloat, type Rng } from '../rng';
 
 /** A stack of identical fighters on one side of a battle. */
 export interface Combatant {
   key: string;
   name: string;
-  type: TroopType;
+  type: UnitType;
   count: number;
   atk: number;
   def: number;
@@ -15,7 +15,7 @@ export interface Combatant {
 export interface StackResult {
   key: string;
   name: string;
-  type: TroopType;
+  type: UnitType;
   start: number;
   alive: number;
 }
@@ -35,8 +35,8 @@ export interface BattleOutcome {
   log: RoundLog[];
   /** Did the side ever strike the type it counters? Used by the saga writer. */
   usedCounter: {
-    attacker: Partial<Record<TroopType, boolean>>;
-    defender: Partial<Record<TroopType, boolean>>;
+    attacker: Partial<Record<UnitType, boolean>>;
+    defender: Partial<Record<UnitType, boolean>>;
   };
 }
 
@@ -46,13 +46,26 @@ interface Live extends Combatant {
 
 const alive = (s: Live) => (s.pool <= 0 ? 0 : Math.ceil(s.pool / s.hp - 1e-9));
 
-/** Who is hit when the countered type is gone: the front line first. */
-const FRONT: readonly TroopType[] = ['shieldwall', 'berserker', 'archer'];
+/**
+ * Who is hit when no countered type is standing: the wall first (raiders must break
+ * through it), then the front line, with siege engines and archers at the back.
+ */
+const FRONT: readonly UnitType[] = [
+  'wall',
+  'shieldwall',
+  'bear',
+  'berserker',
+  'cavalry',
+  'archer',
+  'siege',
+  'ship',
+];
 
-function pickTarget(attackerType: TroopType, enemies: Live[]): { target: Live; counter: boolean } | null {
-  const wanted = COUNTERS[attackerType];
-  const countered = enemies.find((e) => e.type === wanted && alive(e) > 0);
-  if (countered) return { target: countered, counter: true };
+function pickTarget(attackerType: UnitType, enemies: Live[]): { target: Live; counter: boolean } | null {
+  for (const wanted of COUNTERS[attackerType]) {
+    const countered = enemies.find((e) => e.type === wanted && alive(e) > 0);
+    if (countered) return { target: countered, counter: true };
+  }
   for (const type of FRONT) {
     const t = enemies.find((e) => e.type === type && alive(e) > 0);
     if (t) return { target: t, counter: false };
@@ -90,7 +103,11 @@ export function resolveBattle(attackers: Combatant[], defenders: Combatant[], rn
         const pick = pickTarget(stack.type, enemies);
         if (!pick) continue;
         const spread = 1 + MILITARY.variance * (2 * nextFloat(rng) - 1);
-        const counter = pick.counter ? MILITARY.counterBonus : 1;
+        const counter = !pick.counter
+          ? 1
+          : pick.target.type === 'wall'
+            ? MILITARY.siegeWallBonus
+            : MILITARY.counterBonus;
         const soften = MILITARY.defenceK / (MILITARY.defenceK + pick.target.def);
         const damage = n * stack.atk * counter * spread * soften;
         hits.push({ target: pick.target, damage });
@@ -120,8 +137,8 @@ export function resolveBattle(attackers: Combatant[], defenders: Combatant[], rn
 }
 
 /** Sum of fighters per troop type (handy for checks and for the saga). */
-export function countByType(stacks: Array<{ type: TroopType; start: number }>): Record<TroopType, number> {
+export function countByType(stacks: Array<{ type: UnitType; start: number }>): Record<TroopType, number> {
   const out = Object.fromEntries(TROOP_TYPES.map((t) => [t, 0])) as Record<TroopType, number>;
-  for (const s of stacks) out[s.type] += s.start;
+  for (const s of stacks) if (s.type !== 'wall') out[s.type] += s.start;
   return out;
 }

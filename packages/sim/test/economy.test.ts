@@ -8,6 +8,7 @@ import {
   builderSlots,
   goldToFinish,
   newGame,
+  plotSpot,
   productionPerHour,
   storageCap,
   totalPower,
@@ -129,16 +130,16 @@ describe('production over time', () => {
 });
 
 describe('construction', () => {
-  it('builds on an empty plot and finishes on time', () => {
+  it('builds on free ground and finishes on time', () => {
     let s = newGame(1, T0);
     const before = s.resources.timber;
-    s = must(s, { type: 'build', plotId: 'a3', building: 'farmstead' }, T0);
-    expect(s.buildings.a3).toEqual({ id: 'a3', type: 'farmstead', level: 0 });
+    s = must(s, { type: 'build', building: 'farmstead', ...plotSpot('a3') }, T0);
+    expect(s.buildings.b1).toEqual({ id: 'b1', type: 'farmstead', level: 0, ...plotSpot('a3') });
     expect(s.resources.timber).toBe(before - upgradeCost('farmstead', 1).timber!);
     const done = advance(s, T0 + upgradeDurationMs('farmstead', 1));
-    expect(done.state.buildings.a3!.level).toBe(1);
+    expect(done.state.buildings.b1!.level).toBe(1);
     expect(done.state.queue).toHaveLength(0);
-    expect(done.events.some((e) => e.type === 'building.completed' && e.buildingId === 'a3')).toBe(true);
+    expect(done.events.some((e) => e.type === 'building.completed' && e.buildingId === 'b1')).toBe(true);
   });
 
   it('produces at the new rate from the moment an upgrade finished', () => {
@@ -161,7 +162,7 @@ describe('construction', () => {
     s.buildings.hall!.level = 3;
     s = must(s, { type: 'upgrade', buildingId: 'a1' }, T0);
     s = must(s, { type: 'upgrade', buildingId: 'a2' }, T0);
-    const r = apply(s, { type: 'build', plotId: 'a3', building: 'storehouse' }, T0);
+    const r = apply(s, { type: 'build', building: 'storehouse', ...plotSpot('a3') }, T0);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe('NO_BUILDER');
   });
@@ -194,24 +195,24 @@ describe('construction', () => {
     const r = apply(s, { type: 'upgrade', buildingId: 'hall' }, T0);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.message).toContain('Storehouse');
-    s.buildings.a3 = { id: 'a3', type: 'storehouse', level: 2 };
+    s.buildings.a3 = { id: 'a3', type: 'storehouse', level: 2, ...plotSpot('a3') };
     expect(apply(s, { type: 'upgrade', buildingId: 'hall' }, T0).ok).toBe(true);
   });
 
-  it('respects locked plots, building unlocks, occupied plots and limits', () => {
+  it('respects the land you hold, building unlocks, occupied ground and limits', () => {
     const s = newGame(1, T0);
     s.resources.timber = s.resources.food = 99_999;
     const codes = (cmd: Command) => {
       const r = apply(s, cmd, T0);
       return r.ok ? 'ok' : r.error.code;
     };
-    expect(codes({ type: 'build', plotId: 'b1', building: 'farmstead' })).toBe('LOCKED');
-    expect(codes({ type: 'build', plotId: 'a3', building: 'market' })).toBe('LOCKED');
-    expect(codes({ type: 'build', plotId: 'a1', building: 'farmstead' })).toBe('OCCUPIED');
-    expect(codes({ type: 'build', plotId: 'a3', building: 'greatHall' })).toBe('UNKNOWN');
-    s.buildings.a3 = { id: 'a3', type: 'farmstead', level: 1 };
-    s.buildings.a4 = { id: 'a4', type: 'farmstead', level: 1 };
-    expect(codes({ type: 'build', plotId: 'a5', building: 'farmstead' })).toBe('LIMIT');
+    expect(codes({ type: 'build', building: 'farmstead', x: 21, z: 0 })).toBe('OCCUPIED');
+    expect(codes({ type: 'build', building: 'market', ...plotSpot('a3') })).toBe('LOCKED');
+    expect(codes({ type: 'build', building: 'farmstead', ...plotSpot('a1') })).toBe('OCCUPIED');
+    expect(codes({ type: 'build', building: 'greatHall', ...plotSpot('a3') })).toBe('UNKNOWN');
+    s.buildings.a3 = { id: 'a3', type: 'farmstead', level: 1, ...plotSpot('a3') };
+    s.buildings.a4 = { id: 'a4', type: 'farmstead', level: 1, ...plotSpot('a4') };
+    expect(codes({ type: 'build', building: 'farmstead', ...plotSpot('a5') })).toBe('LIMIT');
   });
 
   it('allows a free finish only in the last 5 minutes', () => {
@@ -240,7 +241,7 @@ describe('construction', () => {
   it('is deterministic: same commands, same result', () => {
     const run = () => {
       let s = newGame(5, T0);
-      s = must(s, { type: 'build', plotId: 'a3', building: 'storehouse' }, T0 + MIN);
+      s = must(s, { type: 'build', building: 'storehouse', ...plotSpot('a3') }, T0 + MIN);
       s = must(s, { type: 'upgrade', buildingId: 'hall' }, T0 + 2 * MIN);
       return advance(s, T0 + 5 * HOUR).state;
     };

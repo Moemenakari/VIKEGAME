@@ -1,6 +1,8 @@
 import { BUILDINGS, type BuildingType } from './data/buildings';
 import { ECONOMY } from './data/economy';
-import { HALL_PLOT_ID, PLOTS } from './data/plots';
+import { HALL_PLOT_ID } from './data/plots';
+import { placementError } from './systems/placement';
+import { advanceRaids, callPracticeRaid } from './systems/raids';
 import { DAILY_QUESTS } from './data/quests';
 import { AVATARS, DAILY_CHESTS, MAIN_QUESTS } from './data/mainQuests';
 import { activityPoints, mainGoalDone } from './systems/goals';
@@ -40,7 +42,9 @@ import { rollQuestDay, trackQuests } from './systems/quests';
 
 /** Every player action is one of these plain, serialisable commands (ARCHITECTURE §3). */
 export type Command =
-  | { type: 'build'; plotId: string; building: BuildingType }
+  | { type: 'build'; building: BuildingType; x: number; z: number; rot?: number }
+  | { type: 'move'; buildingId: string; x: number; z: number; rot?: number }
+  | { type: 'callRaid' }
   | { type: 'upgrade'; buildingId: string }
   | { type: 'finishFree'; buildingId: string; queue?: TimerKind }
   | { type: 'finishWithGold'; buildingId: string; queue?: TimerKind }
@@ -180,6 +184,7 @@ function advanceInPlace(state: GameState, now: number, events: GameEvent[]): voi
 
   for (const job of state.training.filter((j) => j.endsAt <= now)) completeTraining(state, job, events);
   if (state.healing && state.healing.endsAt <= now) completeHealing(state, events);
+  advanceRaids(state, now, events);
 
   if (Object.values(produced).some((v) => v > 0)) {
     events.push({ type: 'resources.produced', amounts: produced });
@@ -209,7 +214,7 @@ function startJob(
     buildingId,
     targetLevel,
     startedAt: now,
-    endsAt: now + upgradeDurationMs(type, targetLevel),
+    endsAt: now + upgradeDurationMs(type, targetLevel, state),
   });
   events.push({ type: 'construction.started', buildingId, building: type, targetLevel });
 }
@@ -231,23 +236,46 @@ type Handler<C extends Command> = (
 
 const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>> } = {
   build(state, cmd, now, events) {
-    const plot = PLOTS.find((p) => p.id === cmd.plotId);
     const def = BUILDINGS[cmd.building];
-    if (!plot || !def || cmd.building === 'greatHall') return fail('UNKNOWN', 'You cannot build that here');
-    if (hallLevel(state) < plot.unlockHall)
-      return fail('LOCKED', `This plot opens at Great Hall ${plot.unlockHall}`);
-    if (state.buildings[plot.id]) return fail('OCCUPIED', 'This plot is already in use');
+    if (!def || cmd.building === 'greatHall') return fail('UNKNOWN', 'You cannot build that here');
     if (hallLevel(state) < def.unlockHall)
       return fail('LOCKED', `${def.name} unlocks at Great Hall ${def.unlockHall}`);
     if (countOfType(state, cmd.building) >= def.maxCount) {
       return fail('LIMIT', `Your hold can have ${def.maxCount} × ${def.name}`);
     }
+    const where = placementError(state, cmd.building, cmd.x, cmd.z);
+    if (where) return fail('OCCUPIED', where);
     const err = checkBuilderAndCost(state, cmd.building, 1);
     if (err) return err;
     pay(state.resources, upgradeCost(cmd.building, 1));
-    state.buildings[plot.id] = { id: plot.id, type: cmd.building, level: 0 };
-    startJob(state, plot.id, cmd.building, 1, now, events);
+    const id = `b${state.nextBuildingId++}`;
+    state.buildings[id] = {
+      id,
+      type: cmd.building,
+      level: 0,
+      x: cmd.x,
+      z: cmd.z,
+      rot: cmd.rot ?? Math.atan2(-cmd.x, -cmd.z),
+    };
+    startJob(state, id, cmd.building, 1, now, events);
     return null;
+  },
+
+  move(state, cmd) {
+    const b = state.buildings[cmd.buildingId];
+    if (!b) return fail('UNKNOWN', 'No building there');
+    if (b.id === HALL_PLOT_ID) return fail('LOCKED', 'The Great Hall stays at the heart of the hold');
+    const where = placementError(state, b.type, cmd.x, cmd.z, b.id);
+    if (where) return fail('OCCUPIED', where);
+    b.x = cmd.x;
+    b.z = cmd.z;
+    if (cmd.rot !== undefined) b.rot = cmd.rot;
+    return null;
+  },
+
+  callRaid(state, _cmd, now) {
+    const err = callPracticeRaid(state, now);
+    return err ? fail('BUSY', err) : null;
   },
 
   upgrade(state, cmd, now, events) {
@@ -352,7 +380,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     for (const [id, n] of Object.entries(cmd.troops)) {
       const count = Math.floor(n);
       if (count <= 0) continue;
-      if (!TROOPS[id] || (state.army.troops[id] ?? 0) < count)
+      if (!TROOPS[id] || TROOPS[id].type === 'ship' || (state.army.troops[id] ?? 0) < count)
         return fail('NOT_ENOUGH', 'Not enough troops at home');
       sent[id] = count;
     }

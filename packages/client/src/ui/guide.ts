@@ -1,30 +1,17 @@
-import {
-  BUILDINGS,
-  DAILY_QUESTS,
-  PLOTS,
-  hallLevel,
-  type BuildingType,
-  type GameState,
-  type MainGoal,
-} from '@jarlheim/sim';
+import { BUILDINGS, DAILY_QUESTS, type BuildingType, type GameState, type MainGoal } from '@jarlheim/sim';
 
 /**
  * Where a quest's "Go" arrow takes the player: which plot (or the barrow) to open,
  * and which button to make pulse there. Pure: it only reads the state.
  */
 export interface Route {
-  /** A plot id, or 'barrow'. */
+  /** A building id, 'barrow', or 'build' for the build menu. */
   target: string;
   /** data-testid of the button to highlight once the panel is open. */
   hint: string;
 }
 
-const hasJob = (state: GameState, plotId: string) => state.queue.some((j) => j.buildingId === plotId);
-
-function emptyPlot(state: GameState): string | null {
-  const hall = hallLevel(state);
-  return PLOTS.find((p) => p.unlockHall <= hall && !state.buildings[p.id])?.id ?? null;
-}
+const hasJob = (state: GameState, id: string) => state.queue.some((j) => j.buildingId === id);
 
 /** The best plot holding this building type: highest level first. */
 function plotOf(state: GameState, type: BuildingType): string | null {
@@ -38,13 +25,12 @@ function plotOf(state: GameState, type: BuildingType): string | null {
 function toBuilding(state: GameState, type: BuildingType): Route | null {
   const plot = plotOf(state, type);
   if (plot) return { target: plot, hint: hasJob(state, plot) ? 'finish' : 'upgrade' };
-  const empty = emptyPlot(state);
-  return empty ? { target: empty, hint: `build-${type}` } : null;
+  return { target: 'build', hint: `build-${type}` };
 }
 
 function toTraining(state: GameState): Route | null {
   const trainer = Object.values(state.buildings)
-    .filter((b) => BUILDINGS[b.type].trains && b.level > 0)
+    .filter((b) => BUILDINGS[b.type].trains && BUILDINGS[b.type].trains !== 'ship' && b.level > 0)
     .sort((a, b) => b.level - a.level)[0];
   return trainer ? { target: trainer.id, hint: 'train' } : toBuilding(state, 'shieldYard');
 }
@@ -60,11 +46,10 @@ export function routeForGoal(state: GameState, goal: MainGoal): Route | null {
   }
 }
 
-/** Any construction: an empty plot first, otherwise the Great Hall. */
+/** Any construction: the Great Hall if it is free, otherwise the build menu. */
 function toAnyConstruction(state: GameState): Route | null {
-  const empty = emptyPlot(state);
-  if (empty) return { target: empty, hint: 'build-farmstead' };
-  return toBuilding(state, 'greatHall');
+  if (!hasJob(state, 'hall')) return toBuilding(state, 'greatHall');
+  return { target: 'build', hint: 'build-farmstead' };
 }
 
 export function routeForDaily(state: GameState, questId: string): Route | null {

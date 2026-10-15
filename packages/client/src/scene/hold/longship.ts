@@ -85,13 +85,13 @@ function curl(points: Array<[number, number]>, z0: number, dir: number, radius: 
   return mesh;
 }
 
-function sailTexture(): THREE.CanvasTexture {
+function sailTexture(colors: readonly [string, string]): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
   for (let i = 0; i < 8; i++) {
-    ctx.fillStyle = i % 2 ? '#efe6d2' : '#a3332a';
+    ctx.fillStyle = i % 2 ? colors[0] : colors[1];
     ctx.fillRect(i * 16, 0, 16, 128);
   }
   // Rope lattice used to hold woollen sails in shape.
@@ -108,7 +108,11 @@ function sailTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-export function createLongship(): { group: THREE.Group; update(time: number): void } {
+/** A longship; raiders sail under dark sails. */
+export function createLongship(sailColors: readonly [string, string] = ['#efe6d2', '#a3332a']): {
+  group: THREE.Group;
+  update(time: number): void;
+} {
   const group = new THREE.Group();
   const hull = new THREE.Mesh(
     hullGeometry(),
@@ -190,7 +194,7 @@ export function createLongship(): { group: THREE.Group; update(time: number): vo
   const rest = Float32Array.from(sailPos.array);
   const sail = new THREE.Mesh(
     sailGeo,
-    new THREE.MeshStandardMaterial({ map: sailTexture(), side: THREE.DoubleSide, roughness: 0.95 }),
+    new THREE.MeshStandardMaterial({ map: sailTexture(sailColors), side: THREE.DoubleSide, roughness: 0.95 }),
   );
   sail.position.set(0, 4.95, 0.75);
   sail.castShadow = true;

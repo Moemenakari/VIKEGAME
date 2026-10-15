@@ -1,5 +1,5 @@
-import type { GameState, HoldTerrain } from '@jarlheim/sim';
-import { HALL_PLOT_ID, PLOTS, hallLevel, sampleHeight } from '@jarlheim/sim';
+import type { BuildingType, GameState, HoldTerrain, IncomingRaid } from '@jarlheim/sim';
+import { BUILDINGS, buildRadius, sampleHeight, sumCounts } from '@jarlheim/sim';
 import * as THREE from 'three';
 import type { QualitySettings } from '../quality';
 import { SKY, createSky } from '../sky';
@@ -8,7 +8,6 @@ import {
   FOOTPRINT,
   createBarrow,
   createBuildingModel,
-  createEmptyPlot,
   createFooting,
   createScaffold,
 } from './buildingModels';
@@ -19,14 +18,13 @@ import { createForest, createRocks } from './props';
 import { createTerrainMesh } from './terrainMesh';
 import { createWater, type Water } from './water';
 
-/** Things the player can tap: a plot id (including 'hall') or the longship. */
+/** Things the player can tap: a building id (including 'hall'), the barrow or the longship. */
 export type PickId = string;
 
 interface Slot {
   id: string;
   group: THREE.Group;
   proxy: THREE.Mesh;
-  unlockHall: number;
   /** What is currently shown, so models are only rebuilt when something changed. */
   key: string;
   /** Height above the plot where its label floats. */
@@ -52,6 +50,9 @@ export class HoldScene {
   private lastTime = 0;
   private readonly ship: ReturnType<typeof createLongship>;
   private readonly banner: ReturnType<typeof createBanner>;
+  private ghost: { group: THREE.Group; ring: THREE.Mesh; area: THREE.Mesh; type: BuildingType } | null = null;
+  private raiders: Array<ReturnType<typeof createLongship>> = [];
+  private raidKey = '';
 
   constructor(
     readonly terrain: HoldTerrain,
@@ -93,19 +94,7 @@ export class HoldScene {
     scene.add(createForest(terrain.trees));
     scene.add(createRocks(terrain.rocks));
 
-    // Building plots: the Great Hall and the rings of plots around it.
     const hallPos = new THREE.Vector3(terrain.hall.x, terrain.hall.y, terrain.hall.z);
-    this.addSlot(HALL_PLOT_ID, hallPos, 0.12, 1);
-    for (const plot of PLOTS) {
-      const x = terrain.hall.x + plot.dx;
-      const z = terrain.hall.z + plot.dz;
-      this.addSlot(
-        plot.id,
-        new THREE.Vector3(x, sampleHeight(terrain, x, z) - 0.05, z),
-        plot.rotation,
-        plot.unlockHall,
-      );
-    }
 
     this.banner = createBanner();
     this.banner.group.position.set(terrain.hall.x + 4.5, terrain.hall.y, terrain.hall.z + 5.4);
@@ -157,21 +146,36 @@ export class HoldScene {
     this.pickables.push({ id, object: proxy });
   }
 
-  private addSlot(id: string, position: THREE.Vector3, rotation: number, unlockHall: number): void {
+  /** World position for a spot measured from the centre of the Great Hall. */
+  worldAt(x: number, z: number, target = new THREE.Vector3()): THREE.Vector3 {
+    const wx = this.terrain.hall.x + x;
+    const wz = this.terrain.hall.z + z;
+    return target.set(wx, Math.max(this.terrain.hall.y, sampleHeight(this.terrain, wx, wz)) - 0.05, wz);
+  }
+
+  private addSlot(id: string): Slot {
     const group = new THREE.Group();
-    group.position.copy(position);
-    group.rotation.y = rotation;
     const proxy = new THREE.Mesh(PROXY_GEOMETRY, PROXY_MATERIAL);
     proxy.userData.pickId = id;
     group.add(proxy);
     this.scene.add(group);
-    this.slots.set(id, { id, group, proxy, unlockHall, key: '', labelHeight: 2 });
+    const slot = { id, group, proxy, key: '', labelHeight: 2 };
+    this.slots.set(id, slot);
+    return slot;
+  }
+
+  private clearSlot(slot: Slot): void {
+    for (const child of [...slot.group.children]) {
+      if (child === slot.proxy) continue;
+      slot.group.remove(child);
+      if (child instanceof THREE.Mesh) child.geometry.dispose();
+    }
   }
 
   /** Objects the tap raycast tests: open plots, buildings and the ship. */
   pickTargets(): THREE.Object3D[] {
     const targets: THREE.Object3D[] = this.pickables.map((p) => p.object);
-    for (const slot of this.slots.values()) if (slot.key !== 'locked') targets.push(slot.proxy);
+    for (const slot of this.slots.values()) if (slot.group.visible) targets.push(slot.proxy);
     return targets;
   }
 
@@ -180,43 +184,127 @@ export class HoldScene {
    * changed are rebuilt. Returns true if anything changed.
    */
   syncBuildings(state: GameState): boolean {
-    const hall = hallLevel(state);
     let changed = false;
-    for (const slot of this.slots.values()) {
-      const b = state.buildings[slot.id];
-      const building = state.queue.some((j) => j.buildingId === slot.id);
-      const key = b ? `${b.type}|${b.level}|${building}` : hall >= slot.unlockHall ? 'empty' : 'locked';
+    // Buildings that are gone (none today, but a save can be reset).
+    for (const [id, slot] of this.slots) {
+      if (state.buildings[id]) continue;
+      this.clearSlot(slot);
+      this.scene.remove(slot.group);
+      this.slots.delete(id);
+      changed = true;
+    }
+    for (const b of Object.values(state.buildings)) {
+      const slot = this.slots.get(b.id) ?? this.addSlot(b.id);
+      const building = state.queue.some((j) => j.buildingId === b.id);
+      const key = `${b.type}|${b.level}|${building}|${b.x}|${b.z}|${b.rot}`;
       if (key === slot.key) continue;
+      const modelKey = key.split('|').slice(0, 3).join('|');
+      const rebuild = slot.key.split('|').slice(0, 3).join('|') !== modelKey;
       slot.key = key;
       changed = true;
+      this.worldAt(b.x, b.z, slot.group.position);
+      slot.group.rotation.y = b.rot;
+      if (!rebuild) continue;
 
-      for (const child of [...slot.group.children]) {
-        if (child === slot.proxy) continue;
-        slot.group.remove(child);
-        if (child instanceof THREE.Mesh) child.geometry.dispose();
-      }
-
-      let radius = 2.8;
-      let height = 2;
-      if (b) {
-        ({ radius, height } = FOOTPRINT[b.type]);
-        slot.group.add(b.level > 0 ? createBuildingModel(b.type, b.level) : createFooting(radius));
-        if (building && b.type !== 'greatHall') slot.group.add(createScaffold(radius, height));
-        if (building && b.type === 'greatHall') {
-          const s = createScaffold(3.5, 5);
-          s.position.x = 7.6;
-          slot.group.add(s);
-        }
-      } else if (key === 'empty') {
-        slot.group.add(createEmptyPlot());
+      this.clearSlot(slot);
+      const { radius, height } = FOOTPRINT[b.type];
+      slot.group.add(b.level > 0 ? createBuildingModel(b.type, b.level) : createFooting(radius));
+      if (building && b.type !== 'greatHall') slot.group.add(createScaffold(radius, height));
+      if (building && b.type === 'greatHall') {
+        const s = createScaffold(3.5, 5);
+        s.position.x = 7.6;
+        slot.group.add(s);
       }
       slot.labelHeight = height + 0.6;
-      const hallShape = b?.type === 'greatHall';
+      const hallShape = b.type === 'greatHall';
       slot.proxy.scale.set(hallShape ? 14 : radius * 2, height + 1, hallShape ? 8 : radius * 2);
       slot.proxy.position.y = (height + 1) / 2;
     }
     if (changed) this.updateSmoke(state);
     return changed;
+  }
+
+  // ---- placing and moving buildings -------------------------------------------------
+
+  /** Shows a building where it would stand, with a green or red ring, and the land you hold. */
+  showGhost(type: BuildingType, level: number, state: GameState, hideId?: string): void {
+    this.hideGhost();
+    const group = new THREE.Group();
+    group.add(createBuildingModel(type, Math.max(1, level)));
+    const r = BUILDINGS[type].footprint;
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(r - 0.25, r + 0.15, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: '#7fe07a', transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    ring.position.y = 0.12;
+    group.add(ring);
+    this.scene.add(group);
+    const R = buildRadius(state);
+    const area = new THREE.Mesh(
+      new THREE.RingGeometry(R - 0.3, R, 96).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: '#ffd677', transparent: true, opacity: 0.6, depthWrite: false }),
+    );
+    area.position.set(this.terrain.hall.x, this.terrain.hall.y + 0.15, this.terrain.hall.z);
+    this.scene.add(area);
+    this.ghost = { group, ring, area, type };
+    if (hideId) this.slots.get(hideId)!.group.visible = false;
+  }
+
+  moveGhost(x: number, z: number, rot: number, ok: boolean): void {
+    if (!this.ghost) return;
+    this.worldAt(x, z, this.ghost.group.position);
+    this.ghost.group.rotation.y = rot;
+    (this.ghost.ring.material as THREE.MeshBasicMaterial).color.set(ok ? '#7fe07a' : '#ff5a4a');
+  }
+
+  hideGhost(): void {
+    if (!this.ghost) return;
+    this.scene.remove(this.ghost.group, this.ghost.area);
+    this.ghost.group.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.geometry.dispose();
+    });
+    this.ghost.area.geometry.dispose();
+    this.ghost = null;
+    for (const slot of this.slots.values()) slot.group.visible = true;
+  }
+
+  /** The ghost's tap target (for dragging it). */
+  get ghostObject(): THREE.Object3D | null {
+    return this.ghost?.group ?? null;
+  }
+
+  // ---- raiders at sea -----------------------------------------------------------------
+
+  /** Shows the raiding fleet sailing in from the open sea while the beacon burns. */
+  syncRaid(raid: IncomingRaid | null, now: number): void {
+    const key = raid ? `${raid.spottedAt}|${raid.landsAt}` : '';
+    if (key !== this.raidKey) {
+      this.raidKey = key;
+      for (const r of this.raiders) this.scene.remove(r.group);
+      this.raiders = [];
+      if (raid) {
+        const n = Math.min(4, Math.max(1, sumCounts(raid.ships)));
+        for (let i = 0; i < n; i++) {
+          const ship = createLongship(['#2a2422', '#5a1a16']);
+          this.raiders.push(ship);
+          this.scene.add(ship.group);
+        }
+      }
+    }
+    if (!raid) return;
+    const t = Math.min(1, Math.max(0, (now - raid.spottedAt) / Math.max(1, raid.landsAt - raid.spottedAt)));
+    const { harbor, hall } = this.terrain;
+    const dir = new THREE.Vector2(harbor.x - hall.x, harbor.z - hall.z).normalize();
+    const side = new THREE.Vector2(-dir.y, dir.x);
+    const far = 70;
+    const near = 12;
+    const d = far + (near - far) * t;
+    this.raiders.forEach((ship, i) => {
+      const off = (i - (this.raiders.length - 1) / 2) * 9;
+      ship.group.position.x = harbor.x + dir.x * d + side.x * off;
+      ship.group.position.z = harbor.z + dir.y * d + side.y * off - (i % 2) * 4;
+      ship.group.rotation.y = Math.atan2(-dir.x, -dir.y);
+    });
   }
 
   /** Every finished house with a hearth gets a column of smoke (rebuilt only when that set changes). */
@@ -276,6 +364,7 @@ export class HoldScene {
     this.smoke.update(time, focus);
     this.ship.update(time);
     this.banner.update(time);
+    for (const r of this.raiders) r.update(time + r.group.position.x);
     this.life.update(time, Math.min(0.1, Math.max(0, time - this.lastTime)));
     this.lastTime = time;
   }
