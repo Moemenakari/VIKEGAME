@@ -1,6 +1,7 @@
 import type { Prop } from '@jarlheim/sim';
 import { createRng, nextRange } from '@jarlheim/sim';
 import * as THREE from 'three';
+import { surfaceMaterial } from '../textures/surfaces';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /** Paints every vertex of a geometry, optionally blending towards `top` by height. */
@@ -62,8 +63,8 @@ function instanced(
   props: Prop[],
   sink: number,
   name: string,
+  material: THREE.Material,
 ): THREE.InstancedMesh {
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
   const mesh = new THREE.InstancedMesh(geometry, material, props.length);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -86,9 +87,9 @@ function instanced(
 }
 
 export function createForest(trees: Prop[]): THREE.InstancedMesh {
-  return instanced(pineGeometry(), trees, 0.15, 'forest');
+  return instanced(pineGeometry(), trees, 0.15, 'forest', surfaceMaterial('turf'));
 }
 
 export function createRocks(rocks: Prop[]): THREE.InstancedMesh {
-  return instanced(rockGeometry(), rocks, 0.3, 'rocks');
+  return instanced(rockGeometry(), rocks, 0.3, 'rocks', surfaceMaterial('stone'));
 }

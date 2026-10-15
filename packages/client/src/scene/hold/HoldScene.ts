@@ -13,6 +13,7 @@ import {
   createScaffold,
 } from './buildingModels';
 import { createBanner } from './longhouse';
+import { createLife, type Life } from './life';
 import { createLongship } from './longship';
 import { createForest, createRocks } from './props';
 import { createTerrainMesh } from './terrainMesh';
@@ -45,7 +46,10 @@ export class HoldScene {
   private readonly sky: THREE.Mesh;
   private readonly water: Water;
   private readonly snow: Particles;
-  private readonly smoke: Particles;
+  private smoke: Particles;
+  private smokeKey = '';
+  private readonly life: Life;
+  private lastTime = 0;
   private readonly ship: ReturnType<typeof createLongship>;
   private readonly banner: ReturnType<typeof createBanner>;
 
@@ -62,7 +66,7 @@ export class HoldScene {
 
     // Low winter sun from the south-west: long shadows, warm light.
     const sunDirection = new THREE.Vector3(-0.55, 0.42, 0.72).normalize();
-    this.sun = new THREE.DirectionalLight('#ffe2bd', 2.6);
+    this.sun = new THREE.DirectionalLight('#ffdcb0', 2.5);
     this.sun.position.copy(sunDirection).multiplyScalar(120);
     if (quality.shadowMapSize > 0) {
       this.sun.castShadow = true;
@@ -77,9 +81,11 @@ export class HoldScene {
       cam.far = 300;
       this.sun.shadow.bias = -0.0005;
       this.sun.shadow.normalBias = 0.04;
+      this.sun.shadow.radius = 2.5;
     }
     scene.add(this.sun, this.sun.target);
-    scene.add(new THREE.HemisphereLight('#bcd3ee', '#5a5248', 1.1));
+    // Soft fill until the HDRI sky light arrives (then it only adds a little).
+    scene.add(new THREE.HemisphereLight('#bcd3ee', '#5a5248', 0.55));
 
     scene.add(createTerrainMesh(terrain));
     this.water = createWater(terrain, sunDirection, SKY.horizon);
@@ -105,8 +111,13 @@ export class HoldScene {
     this.banner.group.position.set(terrain.hall.x + 4.5, terrain.hall.y, terrain.hall.z + 5.4);
     scene.add(this.banner.group);
 
-    this.smoke = createSmoke(hallPos.clone().add(new THREE.Vector3(0, 6, 0)));
+    this.smoke = createSmoke([hallPos.clone().add(new THREE.Vector3(0, 6, 0))]);
     scene.add(this.smoke.points);
+
+    // Villagers on the paths and sheep at pasture (fewer on low-end phones).
+    const crowd = { low: [6, 4], medium: [12, 6], high: [20, 9] }[quality.tier];
+    this.life = createLife(terrain, crowd[0]!, crowd[1]!);
+    scene.add(this.life.group);
 
     // The draugr barrow outside the settlement.
     const barrow = createBarrow();
@@ -204,7 +215,36 @@ export class HoldScene {
       slot.proxy.scale.set(hallShape ? 14 : radius * 2, height + 1, hallShape ? 8 : radius * 2);
       slot.proxy.position.y = (height + 1) / 2;
     }
+    if (changed) this.updateSmoke(state);
     return changed;
+  }
+
+  /** Every finished house with a hearth gets a column of smoke (rebuilt only when that set changes). */
+  private updateSmoke(state: GameState): void {
+    const hearths = new Set([
+      'greatHall',
+      'farmstead',
+      'fishRacks',
+      'woodcutter',
+      'smelter',
+      'wolfLodge',
+      'healersHouse',
+      'storehouse',
+    ]);
+    const origins: THREE.Vector3[] = [];
+    for (const slot of this.slots.values()) {
+      const b = state.buildings[slot.id];
+      if (!b || b.level < 1 || !hearths.has(b.type)) continue;
+      const height = b.type === 'greatHall' ? 6 : FOOTPRINT[b.type].height * 0.85;
+      origins.push(slot.group.position.clone().add(new THREE.Vector3(0, height, 0)));
+    }
+    const key = origins.map((o) => `${o.x.toFixed(1)},${o.z.toFixed(1)}`).join('|');
+    if (key === this.smokeKey) return;
+    this.smokeKey = key;
+    this.scene.remove(this.smoke.points);
+    this.smoke.points.geometry.dispose();
+    this.smoke = createSmoke(origins);
+    this.scene.add(this.smoke.points);
   }
 
   /** World position of a pickable (for UI anchors and tests). */
@@ -231,5 +271,7 @@ export class HoldScene {
     this.smoke.update(time, focus);
     this.ship.update(time);
     this.banner.update(time);
+    this.life.update(time, Math.min(0.1, Math.max(0, time - this.lastTime)));
+    this.lastTime = time;
   }
 }

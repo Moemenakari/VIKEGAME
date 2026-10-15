@@ -11,11 +11,13 @@ crowned King of the North.
 > **Challenge #10:** a full 4X mobile strategy game, designed and engineered with **Claude Code**,
 > using only free and open-source tools.
 
-**Status:** ⚔️ **M3: Military.** Raise a Shield Yard, a Bowyer's Range and a Wolf-skin Lodge; train the Shieldwall, Berserkers and Archers (each breaks one other); heal the wounded; and clear ten levels of the Draugr Barrow, a burial mound in a ship-shaped stone setting. Every battle is told as a short saga. (M2 brought the Hold: buildings, timers, offline production, daily quests and saves.)
+**Status:** 🎨 **M3.5: Visual upgrade.** Plank-and-grain walls, stone footings, turf roofs under ragged snow caps, Trelleborg-style raking posts, carved dragon gables, real HDRI sky light, ambient occlusion and bloom, trodden footpaths, chimney smoke, villagers walking and sheep grazing. Before that, ⚔️ **M3: Military.** Raise a Shield Yard, a Bowyer's Range and a Wolf-skin Lodge; train the Shieldwall, Berserkers and Archers (each breaks one other); heal the wounded; and clear ten levels of the Draugr Barrow, a burial mound in a ship-shaped stone setting. Every battle is told as a short saga. (M2 brought the Hold: buildings, timers, offline production, daily quests and saves.)
 
 ### ▶️ Play the preview: **https://moemenakari.github.io/VIKEGAME/**
 
-![Jarlheim M3 — the hold, training at the Shield Yard, the Draugr Barrow and a saga battle report](docs/screenshots/m3-army.jpg)
+![Jarlheim M3.5 — textured longhouses, HDRI light, footpaths and villagers](docs/screenshots/m35-visuals.jpg)
+
+![Jarlheim M3 — training at the Shield Yard, the Draugr Barrow and a saga battle report](docs/screenshots/m3-army.jpg)
 
 ---
 

@@ -48,7 +48,8 @@ export function createSnow(count: number, area = 90, height = 40): Particles {
         );
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = (2.0 + s.z * 3.0) * uScale * (60.0 / -mv.z);
+        // Clamp so a flake right in front of the camera never becomes a big blob.
+        gl_PointSize = min((2.0 + s.z * 3.0) * uScale * (60.0 / -mv.z), 7.0 * uScale);
         vAlpha = smoothstep(0.0, 4.0, fall) * smoothstep(uHeight, uHeight - 6.0, fall);
       }
     `,
@@ -74,28 +75,37 @@ export function createSnow(count: number, area = 90, height = 40): Particles {
   };
 }
 
-/** Hearth smoke rising from a roof, drifting with the wind. */
-export function createSmoke(origin: THREE.Vector3, count = 40): Particles {
+/**
+ * Hearth smoke rising from many roofs at once: one Points object for every
+ * chimney in the hold (each particle knows which roof it belongs to).
+ */
+export function createSmoke(origins: THREE.Vector3[], perOrigin = 28): Particles {
+  const count = Math.max(1, origins.length * perOrigin);
   const seeds = new Float32Array(count * 3);
+  const starts = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    seeds[i * 3] = i / count;
+    const k = i % perOrigin;
+    seeds[i * 3] = k / perOrigin;
     seeds[i * 3 + 1] = (i * 0.618034) % 1;
     seeds[i * 3 + 2] = (i * 0.754877) % 1;
+    const o = origins[Math.floor(i / perOrigin)] ?? new THREE.Vector3(0, -999, 0);
+    starts.set([o.x, o.y, o.z], i * 3);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(seeds, 3));
+  geometry.setAttribute('origin', new THREE.BufferAttribute(starts, 3));
   const material = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
-    uniforms: { uTime: { value: 0 }, uOrigin: { value: origin.clone() } },
+    uniforms: { uTime: { value: 0 } },
     vertexShader: /* glsl */ `
       uniform float uTime;
-      uniform vec3 uOrigin;
+      attribute vec3 origin;
       varying float vLife;
       void main() {
-        float life = fract(position.x + uTime * 0.12);
+        float life = fract(position.x + uTime * 0.12 + origin.x * 0.013);
         vLife = life;
-        vec3 p = uOrigin + vec3(
+        vec3 p = origin + vec3(
           life * life * 6.0 + sin(position.y * 20.0 + uTime) * 0.3 * life,
           life * 9.0,
           (position.z - 0.5) * life * 2.0

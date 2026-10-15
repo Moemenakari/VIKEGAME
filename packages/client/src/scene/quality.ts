@@ -12,10 +12,23 @@ export interface QualitySettings {
   snowflakes: number;
   /** Frames per second while nothing moves (ambient water/snow animation). */
   idleFps: number;
+  /** Edge of the generated surface textures in pixels (0 = plain colours). */
+  textureSize: number;
+  /** Post-processing: none, bloom only, or ambient occlusion + bloom. */
+  postFx: 'none' | 'bloom' | 'full';
 }
 
 const PRESETS: Record<QualityTier, QualitySettings> = {
-  low: { tier: 'low', maxPixelRatio: 1, antialias: false, shadowMapSize: 0, snowflakes: 350, idleFps: 15 },
+  low: {
+    tier: 'low',
+    maxPixelRatio: 1,
+    antialias: false,
+    shadowMapSize: 0,
+    snowflakes: 350,
+    idleFps: 15,
+    textureSize: 0,
+    postFx: 'none',
+  },
   medium: {
     tier: 'medium',
     maxPixelRatio: 1.5,
@@ -23,6 +36,8 @@ const PRESETS: Record<QualityTier, QualitySettings> = {
     shadowMapSize: 1024,
     snowflakes: 900,
     idleFps: 24,
+    textureSize: 256,
+    postFx: 'bloom',
   },
   high: {
     tier: 'high',
@@ -31,6 +46,8 @@ const PRESETS: Record<QualityTier, QualitySettings> = {
     shadowMapSize: 2048,
     snowflakes: 1800,
     idleFps: 30,
+    textureSize: 512,
+    postFx: 'full',
   },
 };
 

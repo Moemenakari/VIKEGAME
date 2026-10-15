@@ -1,5 +1,12 @@
 import { BUILDINGS, generateHoldTerrain, hallLevel, type GameState } from '@jarlheim/sim';
 import * as THREE from 'three';
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { initSurfaces } from './textures/surfaces';
 import { CameraRig } from './CameraRig';
 import { HoldScene, type PickId } from './hold/HoldScene';
 import type { QualitySettings } from './quality';
@@ -39,6 +46,7 @@ export class Engine {
   private labels = new Map<string, { el: HTMLDivElement; text: HTMLSpanElement; bar: HTMLDivElement }>();
   private selected: string | null = null;
   private readonly tmp = new THREE.Vector3();
+  private composer: EffectComposer | null = null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -56,12 +64,15 @@ export class Engine {
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = quality.shadowMapSize > 0;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.className = 'game-canvas';
     container.appendChild(this.renderer.domElement);
 
+    // Detail textures are generated once, before any model is built.
+    initSurfaces(quality.textureSize);
     const terrain = generateHoldTerrain(seed);
     this.hold = new HoldScene(terrain, quality, pixelRatio);
+    void this.loadEnvironment();
     // The sun never moves, so its shadow map only needs to be drawn when asked.
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
@@ -93,6 +104,8 @@ export class Engine {
       this.labels.set(id, { el, text, bar });
     }
 
+    if (quality.postFx !== 'none') this.composer = this.createComposer(pixelRatio);
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
@@ -111,6 +124,7 @@ export class Engine {
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.rig.dispose();
     this.labelsRoot.remove();
+    this.composer?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -169,10 +183,53 @@ export class Engine {
     return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
   }
 
+  /**
+   * Real sky light: a CC0 HDRI from Poly Haven (via @pmndrs/assets), loaded after
+   * the first frame so start-up stays fast. It lights and reflects on every PBR surface.
+   */
+  private async loadEnvironment(): Promise<void> {
+    try {
+      const { default: url } = await import('@pmndrs/assets/hdri/sunset.exr');
+      const texture = await new EXRLoader().loadAsync(url);
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.hold.scene.environment = pmrem.fromEquirectangular(texture).texture;
+      this.hold.scene.environmentIntensity = 0.55;
+      texture.dispose();
+      pmrem.dispose();
+      this.lastInput = performance.now();
+    } catch (err) {
+      console.warn('Sky lighting unavailable', err);
+    }
+  }
+
+  /** Ambient occlusion (soft contact shadows) and bloom (glowing fires), then tone mapping. */
+  private createComposer(pixelRatio: number): EffectComposer {
+    const w = this.container.clientWidth || 1;
+    const h = this.container.clientHeight || 1;
+    const target = new THREE.WebGLRenderTarget(w * pixelRatio, h * pixelRatio, {
+      type: THREE.HalfFloatType,
+      samples: this.quality.antialias ? 4 : 0,
+    });
+    const composer = new EffectComposer(this.renderer, target);
+    composer.setPixelRatio(pixelRatio);
+    composer.addPass(new RenderPass(this.hold.scene, this.rig.camera));
+    if (this.quality.postFx === 'full') {
+      const ao = new GTAOPass(this.hold.scene, this.rig.camera, w, h);
+      ao.updateGtaoMaterial({ radius: 1.6, distanceExponent: 1.5, thickness: 1, scale: 1.2 });
+      ao.blendIntensity = 0.85;
+      composer.addPass(ao);
+    }
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.28, 0.45, 0.92));
+    composer.addPass(new OutputPass());
+    return composer;
+  }
+
   private resize(): void {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h, false);
+    this.composer?.setSize(w, h);
     this.rig.setAspect(w / h);
     this.lastInput = performance.now();
   }
@@ -198,7 +255,8 @@ export class Engine {
     if (!active && this.sinceRender < 1 / this.quality.idleFps) return;
 
     this.hold.update(this.time, this.rig.camera, this.rig.focusPoint);
-    this.renderer.render(this.hold.scene, this.rig.camera);
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.hold.scene, this.rig.camera);
     this.placeLabels();
     this.sinceRender = 0;
     this.frames++;
