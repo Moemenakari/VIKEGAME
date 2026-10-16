@@ -168,7 +168,7 @@ export class LocalBackend implements ChatBackend {
   }
 
   async send(channelId: string, body: string, image?: Blob): Promise<void> {
-    const ch = this.chans.find((c) => c.id === channelId)!;
+    const ch = this.chans.find((c) => c.id === channelId) ?? { kind: 'clan' as const };
     if (image && !canSendImage(this.me!.vip, ch.kind))
       throw new Error('Your VIP level cannot send that here');
     this.push(

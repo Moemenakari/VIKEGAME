@@ -274,3 +274,28 @@ test('heroes: recruit with Saga Horns, see the odds, put a hero in the squad', a
   await page.screenshot({ path: 'test-results/hero-detail.png' });
   expect(errors).toEqual([]);
 });
+
+test('online: after signing in, the realm shows player alliances and other players', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?quality=low&chat=local');
+  await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
+
+  await page.getByTestId('globe').click();
+  await page.getByTestId('alliances-button').click();
+  await expect(page.getByTestId('online-sign-in')).toBeVisible();
+  await page.getByTestId('online-sign-in').click();
+  await page.getByTestId('guest').click();
+  await page.getByTestId('chat-name').fill('Astrid');
+  await page.getByTestId('chat-name-save').click();
+  await expect(page.getByTestId('conversation')).toBeVisible();
+  await page.getByLabel('Close').click();
+
+  // Signed in: your hold is on the shared map with the other players of the realm.
+  await page.getByTestId('globe').click();
+  await expect(page.getByTestId('world-map')).toHaveAttribute('data-players', '2');
+  await page.getByTestId('alliances-button').click();
+  await expect(page.getByTestId('player-alliances')).toContainText('Ravens of Odin');
+  await page.screenshot({ path: 'test-results/online-alliances.png' });
+  expect(errors).toEqual([]);
+});

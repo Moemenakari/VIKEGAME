@@ -14,6 +14,7 @@ import {
   tileKey,
   tileLimit,
   tileOwner,
+  cleanSnapshot,
   hallLevel,
   type GameState,
   type Tile,
@@ -22,6 +23,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameStore } from '../game/store';
 import { formatAmount, formatDuration } from './format';
 import { t, troopName } from './i18n';
+import type { Online } from './useOnline';
+import type { RealmPlayer } from '../online/realm';
 import { AvatarFace, ResourceIcon, TroopTypeIcon } from './icons';
 
 /**
@@ -45,14 +48,21 @@ export function WorldMap({
   onClose,
   onError,
   onReport,
+  online,
+  onSignIn,
 }: {
   store: GameStore;
   state: GameState;
   onClose: () => void;
   onError: (m: string) => void;
   onReport: (id: number) => void;
+  online: Online;
+  onSignIn: () => void;
 }) {
   const [realmId, setRealmId] = useState(state.world.realm);
+  const { refresh } = online;
+  useEffect(() => void refresh(realmId), [refresh, realmId]);
+  const others = online.players.filter((p) => p.realm === realmId && p.id !== online.userId);
   const map = useMemo(() => realmMap(realmId), [realmId]);
   const mine = realmId === state.world.realm;
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -155,6 +165,10 @@ export function WorldMap({
       icon(town.x, town.y, '⚖️', s * 0.8);
       label(town.x, town.y, town.name);
     }
+    for (const p of others) {
+      icon(p.x, p.y, '🏠', s * 0.9);
+      label(p.x, p.y, p.alliance ? `[${p.alliance.tag}] ${p.name}` : p.name, '#bfe9ff');
+    }
     if (mine) {
       icon(state.world.home.x, state.world.home.y, '🛖', s * 1.05);
       label(state.world.home.x, state.world.home.y, state.profile.name, '#ffd677');
@@ -164,7 +178,7 @@ export function WorldMap({
       ctx.lineWidth = 3;
       ctx.strokeRect(ox + picked.x * s, oy + picked.y * s, s, s);
     }
-  }, [map, view, state, mine, picked]);
+  }, [map, view, state, mine, picked, others]);
 
   // Pan with one finger, pinch or wheel to zoom, tap to pick a tile.
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -213,7 +227,13 @@ export function WorldMap({
     map.tiles.filter((x) => x.owner === i).length * 9_500 + i * 3_100 + 41_000;
 
   return (
-    <section className="world" data-testid="world-map" role="dialog" aria-label={t('world')}>
+    <section
+      className="world"
+      data-testid="world-map"
+      data-players={others.length}
+      role="dialog"
+      aria-label={t('world')}
+    >
       <canvas
         ref={canvasRef}
         className="world-canvas"
@@ -281,6 +301,8 @@ export function WorldMap({
           <p className="norse">
             👑 {map.realm.king} · [{ALLIANCES[map.realm.kingAlliance]!.tag}]
           </p>
+          <PlayerAlliances online={online} mine={mine} onSignIn={onSignIn} onError={onError} />
+          <h3>🤖 {t('aiAlliances')}</h3>
           <ul className="alliance-list">
             {ALLIANCES.map((a, i) => (
               <li key={a.tag}>
@@ -333,6 +355,17 @@ export function WorldMap({
               ? t('warLive', { t: formatDuration(war.end - now) })
               : t('warIn', { t: formatDuration(war.start - now) })}
           </p>
+          {online.on && (
+            <div className="duel" data-testid="war-score">
+              <span>
+                #{state.world.realm} <b>{formatAmount(online.warScores[state.world.realm] ?? 0)}</b>
+              </span>
+              <span>VS</span>
+              <span>
+                <b>{formatAmount(online.warScores[war.opponent.id] ?? 0)}</b> #{war.opponent.id}
+              </span>
+            </div>
+          )}
           <p className="muted">{t('kingsWarHow')}</p>
           <h3>🛡 {t('duel')}</h3>
           {duel.rival === null ? (
@@ -355,7 +388,18 @@ export function WorldMap({
         </div>
       )}
 
-      {picked && !sheet && (
+      {picked && !sheet && others.some((p) => p.x === picked.x && p.y === picked.y) && (
+        <PlayerCard
+          store={store}
+          state={state}
+          player={others.find((p) => p.x === picked.x && p.y === picked.y)!}
+          online={online}
+          onError={onError}
+          onReport={onReport}
+          onClose={() => setPicked(null)}
+        />
+      )}
+      {picked && !sheet && !others.some((p) => p.x === picked.x && p.y === picked.y) && (
         <TileCard
           store={store}
           state={state}
@@ -511,4 +555,197 @@ function TileCard({
 function hexA(hex: string, a: number): string {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+/** Player alliances of the realm: found one (Great Hall 5) or join one; each has its own chat. */
+function PlayerAlliances({
+  online,
+  mine,
+  onSignIn,
+  onError,
+}: {
+  online: Online;
+  mine: boolean;
+  onSignIn: () => void;
+  onError: (m: string) => void;
+}) {
+  const [tag, setTag] = useState('');
+  const [name, setName] = useState('');
+  if (!online.on) {
+    return (
+      <div className="online-hint">
+        <p className="muted">{t('onlineHint')}</p>
+        <button className="primary" onClick={onSignIn} data-testid="online-sign-in">
+          🌐 {t('signIn')}
+        </button>
+      </div>
+    );
+  }
+  const myAlliance = online.mine?.alliance?.id ?? null;
+  return (
+    <>
+      <h3>🌐 {t('playerAlliances')}</h3>
+      <ul className="alliance-list" data-testid="player-alliances">
+        {online.alliances.map((a) => (
+          <li key={a.id}>
+            <span className="swatch" style={{ background: '#ffd677' }} />
+            <span className="quest-body">
+              <strong>
+                [{a.tag}] {a.name}
+              </strong>
+              <span className="muted">👥 {a.members}</span>
+            </span>
+            {mine &&
+              (myAlliance === a.id ? (
+                <button
+                  className="secondary small"
+                  onClick={() => online.joinAlliance(null).catch((e: Error) => onError(e.message))}
+                >
+                  {t('leave')}
+                </button>
+              ) : (
+                <button
+                  className="primary small"
+                  onClick={() => online.joinAlliance(a.id).catch((e: Error) => onError(e.message))}
+                >
+                  {t('join')}
+                </button>
+              ))}
+          </li>
+        ))}
+        {online.alliances.length === 0 && <p className="muted">{t('noPlayerAlliances')}</p>}
+      </ul>
+      {mine && !myAlliance && (
+        <form
+          className="new-alliance"
+          onSubmit={(e) => {
+            e.preventDefault();
+            online.createAlliance(tag, name).catch((err: Error) => onError(err.message));
+          }}
+        >
+          <input
+            value={tag}
+            onChange={(e) => setTag(e.target.value.toUpperCase().slice(0, 3))}
+            placeholder="TAG"
+            data-testid="alliance-tag"
+          />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t('allianceName')}
+            maxLength={30}
+            data-testid="alliance-name"
+          />
+          <button
+            className="primary small"
+            type="submit"
+            disabled={tag.length !== 3 || name.length < 3}
+            data-testid="alliance-create"
+          >
+            {t('create')}
+          </button>
+        </form>
+      )}
+    </>
+  );
+}
+
+/** Another player's hold: who they are, and an attack against their last synced defence. */
+function PlayerCard({
+  store,
+  state,
+  player,
+  online,
+  onError,
+  onReport,
+  onClose,
+}: {
+  store: GameStore;
+  state: GameState;
+  player: RealmPlayer;
+  online: Online;
+  onError: (m: string) => void;
+  onReport: (id: number) => void;
+  onClose: () => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const [left, setLeft] = useState<Record<string, boolean>>({});
+  const snapshot = cleanSnapshot(player.defence);
+  const land = Object.fromEntries(
+    Object.entries(state.army.troops).filter(([id, n]) => n > 0 && TROOPS[id]?.type !== 'ship'),
+  );
+  const send = Object.fromEntries(Object.entries(land).filter(([id]) => !left[id]));
+  const ours = armyStrength(Object.entries(send).map(([id, count]) => ({ ...TROOPS[id]!, count })));
+  const theirs =
+    armyStrength(Object.entries(snapshot.troops).map(([id, count]) => ({ ...TROOPS[id]!, count }))) +
+    armyStrength(snapshot.walls.map((w) => ({ ...w, count: 1 })));
+  const shielded = !!player.shieldUntil && Date.parse(player.shieldUntil) > store.now();
+  const ally = !!player.alliance && player.alliance.id === online.mine?.alliance?.id;
+  return (
+    <div className="card panel world-sheet" data-testid="player-card">
+      <button className="close" onClick={onClose} aria-label={t('close')}>
+        ×
+      </button>
+      <div className="hero-head">
+        <AvatarFace id={player.avatar} size={56} />
+        <div>
+          <h2>{player.name}</h2>
+          <p className="norse">
+            {player.alliance ? `[${player.alliance.tag}] ${player.alliance.name}` : t('noAlliance')} · ⚔{' '}
+            {formatAmount(player.power)}
+          </p>
+        </div>
+      </div>
+      {shielded && <p className="stat">🛡 {t('shielded')}</p>}
+      {!online.on || ally || shielded ? null : !sending ? (
+        <button className="primary" onClick={() => setSending(true)} data-testid="attack-player">
+          ⚔ {t('attack')}
+        </button>
+      ) : (
+        <>
+          <div className="send-list">
+            {Object.entries(land).map(([id, n]) => (
+              <label key={id} className="send-item">
+                <input
+                  type="checkbox"
+                  checked={!left[id]}
+                  onChange={() => setLeft({ ...left, [id]: !left[id] })}
+                />
+                <TroopTypeIcon type={TROOPS[id]!.type} size={16} /> {n} {troopName(id)}
+              </label>
+            ))}
+            {sumCounts(land) === 0 && <p className="muted">{t('noneHome')}</p>}
+          </div>
+          <p
+            className={`verdict ${ours >= theirs * 1.6 ? 'favourable' : ours >= theirs * 1.1 ? 'even' : 'risky'}`}
+          >
+            {t('odds')}:{' '}
+            <strong>
+              {t(ours >= theirs * 1.6 ? 'favourable' : ours >= theirs * 1.1 ? 'even' : 'risky')}
+            </strong>{' '}
+            · {t('vsLine', { a: formatAmount(ours), b: formatAmount(theirs) })}
+          </p>
+          <button
+            className="primary"
+            disabled={sumCounts(send) === 0}
+            data-testid="march-player"
+            onClick={() => {
+              const before = state.nextReportId;
+              const err = store.dispatch({
+                type: 'attackPlayer',
+                targetId: player.id,
+                targetName: player.name,
+                snapshot,
+                troops: send,
+              });
+              if (err) onError(err.message);
+              else onReport(before);
+            }}
+          >
+            ⚔ {t('march')}
+          </button>
+        </>
+      )}
+    </div>
+  );
 }

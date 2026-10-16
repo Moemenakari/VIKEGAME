@@ -1,7 +1,6 @@
 import { ALLIANCES, type GameState } from '@jarlheim/sim';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LocalBackend } from '../online/localBackend';
-import { SupabaseBackend } from '../online/supabaseBackend';
+import { chatBackend } from '../online';
 import {
   REACTIONS,
   allianceChannelId,
@@ -15,16 +14,6 @@ import {
 } from '../online/types';
 import { errorText, t } from './i18n';
 
-let backend: ChatBackend | null = null;
-/** One chat connection for the whole app. `?chat=local` uses the offline stand-in (tests, demos). */
-export function chatBackend(): ChatBackend {
-  if (!backend) {
-    const local = new URLSearchParams(location.search).get('chat') === 'local';
-    backend = local ? new LocalBackend() : new SupabaseBackend();
-  }
-  return backend;
-}
-
 type Tab = 'realm' | 'alliance' | 'private' | 'groups' | 'friends';
 
 /**
@@ -35,10 +24,16 @@ export function ChatPanel({
   state,
   onClose,
   onOpenWorld,
+  playerAlliance,
+  onSignedIn,
 }: {
   state: GameState;
   onClose: () => void;
   onOpenWorld: () => void;
+  /** Your player alliance's chat, when you are in one (else the saga alliance you joined). */
+  playerAlliance?: { channelId: string; label: string } | null;
+  /** Called once you are signed in with a profile (puts your hold on the shared map). */
+  onSignedIn?: () => void;
 }) {
   const chat = chatBackend();
   const [status, setStatus] = useState<'loading' | 'out' | 'noProfile' | 'ready' | 'offline'>('loading');
@@ -47,11 +42,14 @@ export function ChatPanel({
   const [tab, setTab] = useState<Tab>('realm');
   const [open, setOpen] = useState<string | null>(null);
 
+  const signedInRef = useRef(onSignedIn);
+  signedInRef.current = onSignedIn;
   const refresh = useCallback(async () => {
     try {
       const r = await chat.connect();
       setMe(r.me);
       setStatus(!r.signedIn ? 'out' : r.me ? 'ready' : 'noProfile');
+      if (r.signedIn && r.me) signedInRef.current?.();
     } catch {
       setStatus('offline');
     }
@@ -128,7 +126,12 @@ export function ChatPanel({
                 <Conversation chat={chat} me={me} channelId={realmChannelId(state.world.realm)} embedded />
               )}
               {tab === 'alliance' &&
-                (state.world.alliance === null ? (
+                (playerAlliance ? (
+                  <>
+                    <p className="norse">{playerAlliance.label}</p>
+                    <Conversation chat={chat} me={me} channelId={playerAlliance.channelId} embedded />
+                  </>
+                ) : state.world.alliance === null ? (
                   <div>
                     <p className="muted">{t('duelJoin')}</p>
                     <button className="primary" onClick={onOpenWorld}>

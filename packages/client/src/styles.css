@@ -1884,3 +1884,38 @@ body,
   color: #f0c44c;
   font-weight: 700;
 }
+
+.new-alliance {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.new-alliance input {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-edge);
+  background: #120e09;
+  color: var(--ink);
+  font: 14px var(--body);
+  user-select: text;
+}
+
+.new-alliance input:first-child {
+  width: 64px;
+  flex: none;
+  text-transform: uppercase;
+}
+
+.new-alliance input:nth-child(2) {
+  flex: 1;
+}
+
+.online-hint {
+  margin: 8px 0 12px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(63, 127, 168, 0.15);
+}

@@ -57,6 +57,11 @@ function fail(error: { message: string } | null): void {
 export class SupabaseBackend implements ChatBackend {
   readonly kind = 'supabase' as const;
   private sb: SupabaseClient;
+
+  /** The shared connection (the realm service uses it too: one client, one session). */
+  get client(): SupabaseClient {
+    return this.sb;
+  }
   private me: ChatProfile | null = null;
   private names = new Map<string, { name: string; vip: number }>();
   private pending = new Map<string, Array<() => void>>();

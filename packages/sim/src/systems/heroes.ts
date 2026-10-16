@@ -30,7 +30,7 @@ export function freshHeroes(): GameState['heroes'] {
 const starFactor = (stars: number) => 1 + HERO_RULES.skillPerStar * stars;
 
 /** The squad as definitions with their level and stars. */
-function squad(state: GameState) {
+function squad(state: Pick<GameState, 'heroes'>) {
   return state.heroes.squad
     .map((id) => ({ def: heroDef(id), owned: state.heroes.owned[id] }))
     .filter(
@@ -40,7 +40,10 @@ function squad(state: GameState) {
 }
 
 /** Battle modifiers for your side, and for the enemy (curses), from your squad. */
-export function heroMods(state: GameState, kind: BattleKind): { ours: SideMods; theirs: SideMods } {
+export function heroMods(
+  state: Pick<GameState, 'heroes'>,
+  kind: BattleKind,
+): { ours: SideMods; theirs: SideMods } {
   const typeAtk: Partial<Record<UnitType, number>> = {};
   let all = 0;
   let curse = 0;

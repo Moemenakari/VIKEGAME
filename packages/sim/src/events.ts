@@ -19,4 +19,12 @@ export type GameEvent =
   | { type: 'battle.resolved'; reportId: number; won: boolean; level: number }
   | { type: 'raid.spotted'; landsAt: number }
   | { type: 'raid.resolved'; reportId: number; won: boolean }
-  | { type: 'heroes.recruited'; heroes: string[] };
+  | { type: 'heroes.recruited'; heroes: string[] }
+  | {
+      type: 'pvp.fought';
+      targetId: string;
+      won: boolean;
+      defenderLosses: Record<string, number>;
+      loot: Cost;
+      reportId: number;
+    };

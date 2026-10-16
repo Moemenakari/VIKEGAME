@@ -27,3 +27,4 @@ export * from './data/world';
 export * from './systems/world';
 export * from './data/heroes';
 export * from './systems/heroes';
+export * from './systems/pvp';

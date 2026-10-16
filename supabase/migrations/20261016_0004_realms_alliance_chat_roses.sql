@@ -19,6 +19,7 @@ select
 from generate_series(1, 4) r, generate_series(1, 6) a
 on conflict (id) do nothing;
 
+-- Kept for older clients; since 0005 the alliance you belong to (holds table) also grants access.
 create or replace function public.join_alliance_chat(realm integer, alliance integer) returns uuid
 language plpgsql security definer set search_path = '' as $fn$
 declare
@@ -31,7 +32,6 @@ begin
   if alliance is not null and (realm not between 1 and 4 or alliance not between 0 and 5) then
     raise exception 'No such alliance';
   end if;
-  -- A player sits in one alliance chat at a time: leave the old one first.
   delete from public.channel_members m
    where m.user_id = me
      and m.channel_id in (select c.id from public.channels c where c.kind = 'clan');

@@ -54,6 +54,7 @@ import { PlotPanel } from './PlotPanel';
 import { WorldMap } from './WorldMap';
 import { ChatPanel } from './ChatPanel';
 import { HeroesPanel } from './HeroesPanel';
+import { useOnline } from './useOnline';
 import { QuestsPanel, Reward, claimableQuests } from './QuestsPanel';
 import { ArmyPanel, BarrowPanel, ReportView, ReportsPanel } from './military';
 
@@ -332,6 +333,10 @@ function Game({
   };
 
   const onError = (message: string) => setToast(errorText(message));
+  const online = useOnline(store, onError, (name) => setToast(t('attackedBy', { n: name })));
+  const playerAlliance = online.mine?.alliance
+    ? online.alliances.find((x) => x.id === online.mine!.alliance!.id)
+    : undefined;
   const run = (cmd: Parameters<GameStore['dispatch']>[0]) => {
     const err = store.dispatch(cmd);
     if (err) onError(err.message);
@@ -564,7 +569,20 @@ function Game({
         <HeroesPanel store={store} state={state} onClose={() => setPanel(null)} onError={onError} />
       )}
       {panel === 'chat' && (
-        <ChatPanel state={state} onClose={() => setPanel(null)} onOpenWorld={() => setPanel('world')} />
+        <ChatPanel
+          state={state}
+          onClose={() => setPanel(null)}
+          onOpenWorld={() => setPanel('world')}
+          onSignedIn={() => void online.resync()}
+          playerAlliance={
+            playerAlliance
+              ? {
+                  channelId: playerAlliance.channelId,
+                  label: `[${playerAlliance.tag}] ${playerAlliance.name}`,
+                }
+              : null
+          }
+        />
       )}
       {panel === 'world' && (
         <WorldMap
@@ -576,6 +594,8 @@ function Game({
             setReportId(id);
             store.dispatch({ type: 'readReport', reportId: id });
           }}
+          online={online}
+          onSignIn={() => setPanel('chat')}
         />
       )}
       {report && <ReportView report={report} onClose={() => setReportId(null)} />}

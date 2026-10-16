@@ -5,7 +5,8 @@ import { placementError } from './systems/placement';
 import { advanceRaids, callPracticeRaid } from './systems/raids';
 import { HERO_RULES } from './data/heroes';
 import { drawHero, grantHero, heroMaxLevel, heroMods } from './systems/heroes';
-import { ALLIANCES, WORLD } from './data/world';
+import { ALLIANCES, REALMS, WORLD } from './data/world';
+import { cleanSnapshot, fightPlayer, sufferAttack, type DefenceSnapshot } from './systems/pvp';
 import { bordersHold, realmMap, tileAt, tileGarrison, tileKey, tileLimit, tileOwner } from './systems/world';
 import type { Cost } from './data/resources';
 import { DAILY_QUESTS } from './data/quests';
@@ -53,6 +54,22 @@ export type Command =
   | { type: 'recruitHero'; count: 1 | 10; gold?: boolean }
   | { type: 'levelHero'; heroId: string }
   | { type: 'setSquad'; squad: string[] }
+  | { type: 'setHome'; realm: number; x: number; y: number }
+  | {
+      type: 'attackPlayer';
+      targetId: string;
+      targetName: string;
+      snapshot: DefenceSnapshot;
+      troops: Record<string, number>;
+    }
+  | {
+      type: 'sufferAttack';
+      attackerName: string;
+      attackerWon: boolean;
+      losses: Record<string, number>;
+      loot: Cost;
+      at: number;
+    }
   | { type: 'joinAlliance'; alliance: number | null }
   | { type: 'conquerTile'; x: number; y: number; troops: Record<string, number> }
   | { type: 'upgrade'; buildingId: string }
@@ -412,6 +429,41 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     if (state.resources.silver < cost) return fail('NOT_ENOUGH', 'Not enough Silver');
     state.resources.silver -= cost;
     h.level++;
+    return null;
+  },
+
+  setHome(state, cmd) {
+    const realm = REALMS.find((r) => r.id === cmd.realm);
+    const tile = realm && tileAt(realmMap(realm.id), cmd.x, cmd.y);
+    if (!realm || !tile || tile.kind === 'sea') return fail('UNKNOWN', 'No such place');
+    if (state.world.realm !== realm.id) state.world.owned = [];
+    state.world.realm = realm.id;
+    state.world.home = { x: cmd.x, y: cmd.y };
+    return null;
+  },
+
+  attackPlayer(state, cmd, now, events) {
+    const sent: Record<string, number> = {};
+    for (const [id, n] of Object.entries(cmd.troops)) {
+      const count = Math.floor(n);
+      if (count <= 0) continue;
+      if (!TROOPS[id] || TROOPS[id].type === 'ship' || (state.army.troops[id] ?? 0) < count)
+        return fail('NOT_ENOUGH', 'Not enough troops at home');
+      sent[id] = count;
+    }
+    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send');
+    fightPlayer(
+      state,
+      sent,
+      { id: cmd.targetId, name: cmd.targetName.slice(0, 20), snapshot: cleanSnapshot(cmd.snapshot) },
+      now,
+      events,
+    );
+    return null;
+  },
+
+  sufferAttack(state, cmd, _now, events) {
+    sufferAttack(state, { ...cmd, attackerName: cmd.attackerName.slice(0, 20) }, events);
     return null;
   },
 
