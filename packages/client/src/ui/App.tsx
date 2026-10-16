@@ -10,6 +10,8 @@ import {
   troopPower,
   type GameEvent,
   homeRealm,
+  HEROES,
+  heroPower,
   placementError,
   suggestSpot,
   type BuildingType,
@@ -42,6 +44,7 @@ import {
   GlobeIcon,
   GoldIcon,
   HeroIcon,
+  HeroPortrait,
   PowerIcon,
   QuestIcon,
   ResourceIcon,
@@ -50,6 +53,7 @@ import {
 import { PlotPanel } from './PlotPanel';
 import { WorldMap } from './WorldMap';
 import { ChatPanel } from './ChatPanel';
+import { HeroesPanel } from './HeroesPanel';
 import { QuestsPanel, Reward, claimableQuests } from './QuestsPanel';
 import { ArmyPanel, BarrowPanel, ReportView, ReportsPanel } from './military';
 
@@ -77,6 +81,7 @@ type Panel =
   | 'build'
   | 'world'
   | 'chat'
+  | 'heroes'
   | null;
 
 /** A building being placed (new) or moved (moveId), at a spot measured from the hall. */
@@ -454,16 +459,20 @@ function Game({
 
       {/* ---- right: heroes as small round portraits ---- */}
       <aside className="heroes">
-        {[0, 1, 2].map((i) => (
-          <button
-            key={i}
-            className="hero locked"
-            onClick={() => setToast(t('heroesSoon'))}
-            aria-label={t('heroes')}
-          >
-            <HeroIcon size={20} />
-          </button>
-        ))}
+        {[0, 1, 2].map((i) => {
+          const h = HEROES.find((x) => x.id === state.heroes.squad[i]);
+          return (
+            <button
+              key={i}
+              className={`hero ${h ? '' : 'locked'}`}
+              onClick={() => openPanel('heroes')}
+              aria-label={h?.name ?? t('heroes')}
+              data-testid={`side-hero-${i}`}
+            >
+              {h ? <HeroPortrait look={h.look} rarity={h.rarity} size={38} /> : <HeroIcon size={20} />}
+            </button>
+          );
+        })}
       </aside>
 
       {((selected && selected !== 'longship') || panel === 'build') && !placing && (
@@ -550,6 +559,9 @@ function Game({
       )}
       {panel === 'reports' && (
         <ReportsPanel state={state} onOpen={openReport} onClose={() => setPanel(null)} />
+      )}
+      {panel === 'heroes' && (
+        <HeroesPanel store={store} state={state} onClose={() => setPanel(null)} onError={onError} />
       )}
       {panel === 'chat' && (
         <ChatPanel state={state} onClose={() => setPanel(null)} onOpenWorld={() => setPanel('world')} />
@@ -666,7 +678,7 @@ function Game({
         <button onClick={() => openPanel('build')} aria-label={t('build')} data-testid="build-button">
           <BuilderIcon size={26} />
         </button>
-        <button onClick={() => setToast(t('heroesSoon'))} aria-label={t('heroes')}>
+        <button onClick={() => openPanel('heroes')} aria-label={t('heroes')} data-testid="heroes-button">
           <HeroIcon size={26} />
         </button>
         <button onClick={() => setToast(t('bagSoon'))} aria-label={t('bag')}>
@@ -805,7 +817,7 @@ function ProfilePanel({
         </div>
         <div>
           <dt>🏠 {t('buildPower')}</dt>
-          <dd>{formatAmount(power - army)}</dd>
+          <dd>{formatAmount(power - army - heroPower(state))}</dd>
         </div>
         <div>
           <dt>🛡 {t('armyPower')}</dt>
@@ -813,7 +825,7 @@ function ProfilePanel({
         </div>
         <div>
           <dt>✦ {t('heroPower')}</dt>
-          <dd>0</dd>
+          <dd>{formatAmount(heroPower(state))}</dd>
         </div>
         <div>
           <dt>🌍 {t('server')}</dt>

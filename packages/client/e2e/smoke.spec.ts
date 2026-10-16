@@ -250,3 +250,27 @@ test('sign up with a username, chat in the realm, gift a rose and message a frie
   await expect(page.getByTestId('conversation')).toContainText('See you at the Thing');
   expect(errors).toEqual([]);
 });
+
+test('heroes: recruit with Saga Horns, see the odds, put a hero in the squad', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?quality=low');
+  await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
+
+  await page.getByTestId('side-hero-0').click();
+  await expect(page.getByTestId('heroes')).toContainText('Bóndi');
+  await page.screenshot({ path: 'test-results/heroes.png' });
+  await page.getByTestId('heroes-tab-recruit').click();
+  await expect(page.getByTestId('horns')).toHaveText('3');
+  await page.getByTestId('recruit-1').click();
+  await expect(page.getByTestId('drawn')).toBeVisible();
+  await expect(page.getByTestId('horns')).toHaveText('2');
+  await page.screenshot({ path: 'test-results/recruit.png' });
+  const owned = await page.evaluate(() => Object.keys(window.__jarlheim!.state().heroes.owned));
+  expect(owned.length).toBeGreaterThanOrEqual(1);
+  await page.getByTestId('heroes-tab-heroes').click();
+  await page.getByTestId('hero-ketil').click();
+  await expect(page.getByTestId('hero-detail')).toBeVisible();
+  await page.screenshot({ path: 'test-results/hero-detail.png' });
+  expect(errors).toEqual([]);
+});

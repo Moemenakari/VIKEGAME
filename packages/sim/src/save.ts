@@ -1,3 +1,4 @@
+import { freshHeroes } from './systems/heroes';
 import { BUILDING_TYPES } from './data/buildings';
 import { RESOURCES } from './data/resources';
 import {
@@ -38,6 +39,8 @@ const migrations: Record<number, (state: Record<string, unknown>) => Record<stri
   },
   // v4 → v5: a place on the world map.
   4: (state) => ({ ...freshWorld(), ...state }),
+  // v5 → v6: heroes (Bóndi Ketil leads from the start, plus a few Saga Horns).
+  5: (state) => ({ heroes: freshHeroes(), ...state }),
 };
 
 export function serialize(state: GameState): string {
@@ -93,6 +96,9 @@ function isGameState(s: unknown): s is GameState {
   if (!Array.isArray(q.chests)) return false;
   const p = s.profile;
   if (!isObj(p) || typeof p.name !== 'string' || !isNum(p.avatar) || !Array.isArray(p.owned)) return false;
+  const hz = s.heroes;
+  if (!isObj(hz) || !isObj(hz.owned) || !Array.isArray(hz.squad) || !isNum(hz.horns) || !isObj(hz.pity))
+    return false;
   const w = s.world;
   if (!isObj(w) || !isNum(w.realm) || !isObj(w.home) || !Array.isArray(w.owned)) return false;
   const raid = s.raid;

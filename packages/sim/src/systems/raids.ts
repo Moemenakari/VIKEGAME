@@ -7,6 +7,7 @@ import { createRng, nextFloat, nextInt, type Rng } from '../rng';
 import type { BattleReport, GameState, IncomingRaid, ReportLine } from '../state';
 import { resolveBattle, type BattleOutcome, type Combatant, type StackResult } from './combat';
 import { hallLevel } from './economy';
+import { heroMods } from './heroes';
 import { addCounts, armyStrength, homeStrength, sumCounts, woundedCapacity } from './military';
 
 const unitStrength = (id: string) => armyStrength([{ ...TROOPS[id]!, count: 1 }]);
@@ -133,6 +134,7 @@ function bury(state: GameState, results: StackResult[]): Record<string, number> 
  */
 export function resolveRaid(state: GameState, raid: IncomingRaid, now: number, events: GameEvent[]): void {
   const rng = createRng(state.rngState);
+  const hm = heroMods(state, 'raid');
   const variant = RAID_VARIANTS.find((v) => v.id === raid.variant) ?? RAID_VARIANTS[0]!;
   const saga: string[] = [`${variant.name} came out of the sea mist with ${sumCounts(raid.ships)} ships.`];
   const defenderLines: ReportLine[] = [];
@@ -144,7 +146,10 @@ export function resolveRaid(state: GameState, raid: IncomingRaid, now: number, e
     Object.entries(state.army.troops).filter(([id, n]) => TROOPS[id]?.type === 'ship' && n > 0),
   );
   if (sumCounts(ourShips) > 0) {
-    const sea = resolveBattle(stacksOf(ourShips), stacksOf(raid.ships), rng);
+    const sea = resolveBattle(stacksOf(ourShips), stacksOf(raid.ships), rng, {
+      attacker: hm.ours,
+      defender: hm.theirs,
+    });
     const theirShips = sumCounts(raid.ships);
     const sunk = sea.defender.reduce((n, s) => n + (s.start - s.alive), 0);
     const drowned = theirShips ? sunk / theirShips : 0;
@@ -176,7 +181,10 @@ export function resolveRaid(state: GameState, raid: IncomingRaid, now: number, e
     raidersWon = true;
     saga.push('There was no wall and no one to hold a shield. They walked into the hold.');
   } else {
-    land = resolveBattle(stacksOf(landing), [...wallStacks, ...stacksOf(homeTroops)], rng);
+    land = resolveBattle(stacksOf(landing), [...wallStacks, ...stacksOf(homeTroops)], rng, {
+      attacker: hm.theirs,
+      defender: hm.ours,
+    });
     raidersWon = land.attackerWon;
     const wallsLeft = land.defender.filter((s) => s.type === 'wall' && s.alive > 0).length;
     if (wallStacks.length) {
@@ -219,6 +227,7 @@ export function resolveRaid(state: GameState, raid: IncomingRaid, now: number, e
       reward.timber = Math.round(strength * RAIDS.salvagePerStrength.timber);
       state.resources.silver += reward.silver;
       state.resources.timber += reward.timber;
+      state.heroes.horns += 1;
     }
     saga.push('The raiders fled to their ships. Your hold stands, and the skalds will remember it.');
   }

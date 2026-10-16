@@ -3,6 +3,8 @@ import { ECONOMY } from './data/economy';
 import { HALL_PLOT_ID } from './data/plots';
 import { placementError } from './systems/placement';
 import { advanceRaids, callPracticeRaid } from './systems/raids';
+import { HERO_RULES } from './data/heroes';
+import { drawHero, grantHero, heroMaxLevel, heroMods } from './systems/heroes';
 import { ALLIANCES, WORLD } from './data/world';
 import { bordersHold, realmMap, tileAt, tileGarrison, tileKey, tileLimit, tileOwner } from './systems/world';
 import type { Cost } from './data/resources';
@@ -48,6 +50,9 @@ export type Command =
   | { type: 'build'; building: BuildingType; x: number; z: number; rot?: number }
   | { type: 'move'; buildingId: string; x: number; z: number; rot?: number }
   | { type: 'callRaid' }
+  | { type: 'recruitHero'; count: 1 | 10; gold?: boolean }
+  | { type: 'levelHero'; heroId: string }
+  | { type: 'setSquad'; squad: string[] }
   | { type: 'joinAlliance'; alliance: number | null }
   | { type: 'conquerTile'; x: number; y: number; troops: Record<string, number> }
   | { type: 'upgrade'; buildingId: string }
@@ -313,7 +318,8 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
       const t = TROOPS[id]!;
       return { key: id, name: t.name, type: t.type, count, atk: t.atk, def: t.def, hp: t.hp };
     });
-    const outcome = resolveBattle(attackers, garrison, rng);
+    const hm = heroMods(state, 'conquest');
+    const outcome = resolveBattle(attackers, garrison, rng, { attacker: hm.ours, defender: hm.theirs });
     let room = Math.max(
       0,
       woundedCapacity(state) - sumCounts(state.army.wounded) - sumCounts(state.healing?.troops ?? {}),
@@ -372,6 +378,48 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     state.rngState = rng.state;
     state.reports = [report, ...state.reports].slice(0, MILITARY.maxReports);
     events.push({ type: 'battle.resolved', reportId: report.id, won: report.won, level: tile.level });
+    return null;
+  },
+
+  recruitHero(state, cmd, _now, events) {
+    if (cmd.count !== 1 && cmd.count !== 10) return fail('UNKNOWN', 'Recruit 1 or 10');
+    if (cmd.gold) {
+      const cost = HERO_RULES.goldPerRecruit * cmd.count;
+      if (state.resources.gold < cost) return fail('NOT_ENOUGH', 'Not enough Gold');
+      state.resources.gold -= cost;
+    } else {
+      if (state.heroes.horns < cmd.count) return fail('NOT_ENOUGH', 'Not enough Saga Horns');
+      state.heroes.horns -= cmd.count;
+    }
+    const rng = createRng(state.rngState);
+    const heroes: string[] = [];
+    for (let i = 0; i < cmd.count; i++) {
+      const h = drawHero(state, rng);
+      grantHero(state, h.id);
+      heroes.push(h.id);
+    }
+    state.rngState = rng.state;
+    events.push({ type: 'heroes.recruited', heroes });
+    return null;
+  },
+
+  levelHero(state, cmd) {
+    const h = state.heroes.owned[cmd.heroId];
+    if (!h) return fail('UNKNOWN', 'You do not have this hero');
+    if (h.level >= heroMaxLevel(state))
+      return fail('REQUIREMENT', 'Upgrade the Great Hall to train heroes higher');
+    const cost = HERO_RULES.levelCost(h.level);
+    if (state.resources.silver < cost) return fail('NOT_ENOUGH', 'Not enough Silver');
+    state.resources.silver -= cost;
+    h.level++;
+    return null;
+  },
+
+  setSquad(state, cmd) {
+    const squad = [...new Set(cmd.squad)];
+    if (squad.length > HERO_RULES.squadSize) return fail('LIMIT', 'A squad has three heroes');
+    if (squad.some((id) => !state.heroes.owned[id])) return fail('UNKNOWN', 'You do not have this hero');
+    state.heroes.squad = squad;
     return null;
   },
 
@@ -497,7 +545,8 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
       const u = DRAUGR_UNITS[id]!;
       return { key: id, name: u.name, type: u.type, count, atk: u.atk, def: u.def, hp: u.hp };
     });
-    const outcome = resolveBattle(attackers, defenders, rng);
+    const hm = heroMods(state, 'barrow');
+    const outcome = resolveBattle(attackers, defenders, rng, { attacker: hm.ours, defender: hm.theirs });
 
     // The fallen: some are wounded if the healers have room, the rest are dead.
     let room = Math.max(
@@ -534,6 +583,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
           reward[r as keyof typeof reward] = (reward[r as keyof typeof reward] ?? 0) + n;
         }
         state.pve.draugrCleared = band.level;
+        state.heroes.horns += 1;
       }
     }
 
@@ -589,6 +639,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     if (!mainGoalDone(state, quest.goal)) return fail('NOT_READY', 'Quest not finished yet');
     grant(state.resources, quest.reward);
     state.mainQuest++;
+    state.heroes.horns += 1;
     events.push({ type: 'quest.claimed', questId: quest.id, reward: quest.reward });
     return null;
   },
@@ -599,6 +650,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     if (state.quests.chests.includes(cmd.index)) return fail('NOT_READY', 'Already claimed');
     if (activityPoints(state) < chest.points) return fail('NOT_READY', 'Quest not finished yet');
     grant(state.resources, chest.reward);
+    if (cmd.index >= 3) state.heroes.horns += 1;
     state.quests.chests.push(cmd.index);
     events.push({ type: 'quest.claimed', questId: `chest-${cmd.index}`, reward: chest.reward });
     return null;

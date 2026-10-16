@@ -2,6 +2,7 @@ import type { BuildingType } from './data/buildings';
 import { ECONOMY } from './data/economy';
 import { HALL_PLOT_ID, PLOTS } from './data/plots';
 import { realmMap } from './systems/world';
+import { freshHeroes } from './systems/heroes';
 import type { Cost, Resources } from './data/resources';
 import type { UnitType } from './data/troops';
 
@@ -148,9 +149,16 @@ export interface GameState {
     /** Index into ALLIANCES, or null. */
     alliance: number | null;
   };
+  /** Heroes you have recruited, the squad of three that leads your warriors, and Saga Horns. */
+  heroes: {
+    owned: Record<string, { level: number; stars: number; dupes: number }>;
+    squad: string[];
+    horns: number;
+    pity: { epic: number; legendary: number };
+  };
 }
 
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6;
 
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
@@ -173,6 +181,7 @@ export function newGame(seed: number, now: number): GameState {
     ...freshProfile(),
     ...freshRaids(),
     ...freshWorld(),
+    heroes: freshHeroes(),
   };
 }
 

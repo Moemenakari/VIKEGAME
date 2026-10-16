@@ -1739,3 +1739,148 @@ body,
 .badge-dot.static {
   position: static;
 }
+
+/* ---- heroes -------------------------------------------------------------------- */
+.hero {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.squad {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+}
+
+.hero-slot {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.hero-slot .empty {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px dashed var(--panel-edge);
+  color: var(--gold);
+  font-size: 26px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.hero-card {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(201, 162, 74, 0.3);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.hero-card.locked svg {
+  filter: grayscale(1) brightness(0.55);
+}
+
+.hero-card.in-squad {
+  border-color: var(--gold-hi);
+  background: rgba(227, 181, 82, 0.14);
+}
+
+.hero-name {
+  font-weight: 700;
+  text-align: center;
+}
+
+.stars {
+  color: #f0c44c;
+  letter-spacing: -1px;
+}
+
+.stars .off {
+  color: rgba(255, 255, 255, 0.18);
+}
+
+.hero-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.rarity.rare,
+.odds .rare {
+  color: #6aa8e8;
+}
+
+.rarity.epic,
+.odds .epic {
+  color: #c58af0;
+}
+
+.rarity.legendary,
+.odds .legendary {
+  color: #f0c44c;
+}
+
+.odds {
+  list-style: none;
+  display: flex;
+  gap: 14px;
+  padding: 0;
+  margin: 8px 0 0;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.horns b {
+  color: var(--gold-hi);
+  font-size: 18px;
+}
+
+.recruit-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.recruit-buttons .secondary {
+  grid-column: span 2;
+}
+
+.drawn {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.drawn-hero {
+  display: grid;
+  justify-items: center;
+  font-size: 11px;
+  animation: rise 0.35s ease-out;
+}
+
+.drawn-hero.legendary small {
+  color: #f0c44c;
+  font-weight: 700;
+}

@@ -291,3 +291,40 @@ export const AvatarFace = ({ id, size = 44 }: { id: number; size?: number }) => 
     </svg>
   );
 };
+
+/** Hero portraits, drawn in code from each hero's colours, framed by rarity. */
+export const RARITY_COLOR = { rare: '#4a8ac9', epic: '#a35ad8', legendary: '#f0b43c' } as const;
+
+export const HeroPortrait = ({
+  look,
+  rarity,
+  size = 56,
+}: {
+  look: { bg: string; hair: string; gear: string; female?: boolean };
+  rarity: keyof typeof RARITY_COLOR;
+  size?: number;
+}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="11.4" fill={look.bg} stroke={RARITY_COLOR[rarity]} strokeWidth="1.2" />
+    {look.female && (
+      <path
+        d="M6.5 11c-1 4 0 8 1.5 9M17.5 11c1 4 0 8-1.5 9"
+        stroke={look.hair}
+        strokeWidth="2.2"
+        fill="none"
+        strokeLinecap="round"
+      />
+    )}
+    <circle cx="12" cy="12.4" r="5" fill="#e8c4a0" />
+    <path d="M6.8 11.4a5.2 5.2 0 0110.4 0z" fill={look.gear} />
+    {!look.female && <rect x="11.35" y="10.9" width="1.3" height="3.4" fill={look.gear} />}
+    {look.female ? (
+      <path d="M7 11c1-3 9-3 10 0" stroke={look.hair} strokeWidth="1.4" fill="none" />
+    ) : (
+      <path d="M7.3 14.3c.5 5.5 8.9 5.5 9.4 0-1.9 1.1-7.5 1.1-9.4 0z" fill={look.hair} />
+    )}
+    <circle cx="10.1" cy="12.9" r=".65" fill="#1a1a1a" />
+    <circle cx="13.9" cy="12.9" r=".65" fill="#1a1a1a" />
+    {rarity === 'legendary' && <path d="M9 3.2l1.4 1.4L12 3l1.6 1.6L15 3.2 14.5 5h-5z" fill="#f0b43c" />}
+  </svg>
+);

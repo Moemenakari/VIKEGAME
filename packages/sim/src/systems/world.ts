@@ -4,6 +4,7 @@ import { createRng, hashString, nextInt } from '../rng';
 import { TROOPS } from '../data/troops';
 import type { Combatant } from './combat';
 import { armyStrength } from './military';
+import { heroLand } from './heroes';
 import type { GameState } from '../state';
 
 export type TileKind = 'sea' | 'field' | 'forest' | 'hills' | 'capital' | 'fort' | 'town';
@@ -177,6 +178,8 @@ export function territoryYield(state: GameState): Record<'food' | 'timber' | 'ir
     if (!t || !y1) continue;
     for (const [r, v] of Object.entries(y1)) out[r as keyof typeof out] += v * t.level;
   }
+  const boost = 1 + heroLand(state);
+  for (const r of Object.keys(out) as Array<keyof typeof out>) out[r] *= boost;
   return out;
 }
 

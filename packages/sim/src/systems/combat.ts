@@ -1,5 +1,6 @@
 import { COUNTERS, MILITARY, TROOP_TYPES, type TroopType, type UnitType } from '../data/troops';
 import { nextFloat, type Rng } from '../rng';
+import type { SideMods } from './heroes';
 
 /** A stack of identical fighters on one side of a battle. */
 export interface Combatant {
@@ -79,7 +80,12 @@ function pickTarget(attackerType: UnitType, enemies: Live[]): { target: Live; co
  * standing when the round began), so no side gets a free first blow and the
  * counter triangle decides. The attacker wins only by leaving no defender standing.
  */
-export function resolveBattle(attackers: Combatant[], defenders: Combatant[], rng: Rng): BattleOutcome {
+export function resolveBattle(
+  attackers: Combatant[],
+  defenders: Combatant[],
+  rng: Rng,
+  mods: { attacker?: SideMods; defender?: SideMods } = {},
+): BattleOutcome {
   const A: Live[] = attackers.filter((c) => c.count > 0).map((c) => ({ ...c, pool: c.count * c.hp }));
   const D: Live[] = defenders.filter((c) => c.count > 0).map((c) => ({ ...c, pool: c.count * c.hp }));
   const startA = A.map(alive);
@@ -93,9 +99,12 @@ export function resolveBattle(attackers: Combatant[], defenders: Combatant[], rn
     round++;
     const entry: RoundLog = { round, attackerDamage: 0, defenderDamage: 0 };
     const hits: Array<{ target: Live; damage: number }> = [];
-    for (const [side, enemies, key] of [
-      [A, D, 'attacker'],
-      [D, A, 'defender'],
+    const health = (side: Live[]) => side.reduce((n, x) => n + Math.max(0, x.pool), 0);
+    const hpA = health(A);
+    const hpD = health(D);
+    for (const [side, enemies, key, own, foe, losing] of [
+      [A, D, 'attacker', mods.attacker, mods.defender, hpA < hpD],
+      [D, A, 'defender', mods.defender, mods.attacker, hpD < hpA],
     ] as const) {
       for (const stack of side) {
         const n = alive(stack);
@@ -109,7 +118,9 @@ export function resolveBattle(attackers: Combatant[], defenders: Combatant[], rn
             ? MILITARY.siegeWallBonus
             : MILITARY.counterBonus;
         const soften = MILITARY.defenceK / (MILITARY.defenceK + pick.target.def);
-        const damage = n * stack.atk * counter * spread * soften;
+        const boost =
+          (own?.attack(stack.type, round, losing) ?? 1) * (foe?.taken(pick.target.type, round) ?? 1);
+        const damage = n * stack.atk * counter * spread * soften * boost;
         hits.push({ target: pick.target, damage });
         if (pick.counter) usedCounter[key][stack.type] = true;
         if (key === 'attacker') entry.attackerDamage += damage;
