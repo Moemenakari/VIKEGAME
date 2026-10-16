@@ -220,3 +220,33 @@ test('the globe opens Midgard: realms, alliances, the King and the wars', async 
   await expect(page.getByTestId('world-map')).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('sign up with a username, chat in the realm, gift a rose and message a friend', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/?quality=low&chat=local');
+  await page.waitForFunction(() => window.__jarlheim?.ready === true, undefined, { timeout: 30_000 });
+
+  await page.getByTestId('chat-button').click();
+  await expect(page.getByTestId('sign-in')).toBeVisible();
+  await page.screenshot({ path: 'test-results/sign-in.png' });
+  await page.getByTestId('pw-mode').click();
+  await page.getByTestId('username').fill('astrid_88');
+  await page.getByTestId('password').fill('secret123');
+  await page.getByTestId('pw-submit').click();
+
+  await expect(page.getByTestId('conversation')).toContainText('Hail, settlers');
+  await page.getByTestId('chat-input').fill('Hail from the north!');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('conversation')).toContainText('Hail from the north!');
+  await page.getByTestId('react-🌹').first().click();
+  await expect(page.getByTestId('react-🌹').first()).toContainText('1');
+  await page.screenshot({ path: 'test-results/chat.png' });
+
+  await page.getByTestId('chat-friends').click();
+  await page.getByTestId('dm-Sigrun').click();
+  await page.getByTestId('chat-input').fill('See you at the barrow');
+  await page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('conversation')).toContainText('See you at the Thing');
+  expect(errors).toEqual([]);
+});

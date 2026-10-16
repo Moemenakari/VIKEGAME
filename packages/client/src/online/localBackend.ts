@@ -7,7 +7,7 @@ import type {
   FriendEntry,
   Reaction,
 } from './types';
-import { REALM_CHANNEL_ID, canSendImage } from './types';
+import { REALM_CHANNEL_ID, USERNAME_RE, allianceChannelId, canSendImage } from './types';
 
 /**
  * An in-memory stand-in for the chat server, used by the automated tests and by
@@ -84,12 +84,58 @@ export class LocalBackend implements ChatBackend {
       ch.lastBody = body || '📷 Image';
       ch.lastAt = m.createdAt;
     }
-    for (const l of this.listeners.get(channelId) ?? []) l(m);
+    for (const l of this.listeners.get(channelId) ?? []) l(structuredClone(m));
     return m;
   }
 
+  private signedIn = false;
+
   async connect(): Promise<ConnectResult> {
-    return { me: this.me };
+    return { signedIn: this.signedIn, me: this.me };
+  }
+
+  async signInGoogle(): Promise<void> {
+    this.signedIn = true;
+  }
+
+  async signUp(username: string, password: string): Promise<ChatProfile> {
+    if (!USERNAME_RE.test(username.trim().toLowerCase()))
+      throw new Error('Usernames are 3 to 16 letters, numbers or _');
+    if (password.length < 6) throw new Error('Passwords need at least 6 characters');
+    this.signedIn = true;
+    return this.createProfile(username.trim());
+  }
+
+  async signIn(): Promise<ConnectResult> {
+    this.signedIn = true;
+    return this.connect();
+  }
+
+  async playAsGuest(): Promise<ConnectResult> {
+    this.signedIn = true;
+    return this.connect();
+  }
+
+  async signOut(): Promise<void> {
+    this.signedIn = false;
+    this.me = null;
+  }
+
+  async joinAllianceChat(realm: number, alliance: number | null): Promise<void> {
+    this.chans = this.chans.filter((c) => c.kind !== 'clan');
+    if (alliance === null) return;
+    const id = allianceChannelId(realm, alliance);
+    this.chans.push({
+      id,
+      kind: 'clan',
+      title: 'Alliance',
+      ownerId: null,
+      lastBody: null,
+      lastAt: null,
+      unread: 0,
+    });
+    if (!this.log.some((m) => m.channelId === id))
+      this.push(id, 'npc-sigrun', 'Welcome to the alliance! Help each other build and we win the duel.');
   }
 
   async createProfile(name: string): Promise<ChatProfile> {
@@ -110,7 +156,8 @@ export class LocalBackend implements ChatBackend {
   }
 
   async messages(channelId: string): Promise<ChatMessage[]> {
-    return this.log.filter((m) => m.channelId === channelId);
+    // Copies, like rows from a real server: the UI never shares objects with the store.
+    return this.log.filter((m) => m.channelId === channelId).map((m) => structuredClone(m));
   }
 
   subscribe(channelId: string, onMessage: (m: ChatMessage) => void): () => void {

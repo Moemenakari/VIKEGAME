@@ -49,6 +49,7 @@ import {
 } from './icons';
 import { PlotPanel } from './PlotPanel';
 import { WorldMap } from './WorldMap';
+import { ChatPanel } from './ChatPanel';
 import { QuestsPanel, Reward, claimableQuests } from './QuestsPanel';
 import { ArmyPanel, BarrowPanel, ReportView, ReportsPanel } from './military';
 
@@ -66,7 +67,17 @@ declare global {
 const realClock = { now: () => Date.now() };
 
 type Panel =
-  'quests' | 'settings' | 'army' | 'barrow' | 'reports' | 'builders' | 'profile' | 'build' | 'world' | null;
+  | 'quests'
+  | 'settings'
+  | 'army'
+  | 'barrow'
+  | 'reports'
+  | 'builders'
+  | 'profile'
+  | 'build'
+  | 'world'
+  | 'chat'
+  | null;
 
 /** A building being placed (new) or moved (moveId), at a spot measured from the hall. */
 interface Placing {
@@ -225,6 +236,18 @@ function Game({
       delete window.__jarlheim;
     };
   }, [quality, select, setToast, store]);
+
+  // First visit: offer an account (Google, username + password, or guest) once.
+  useEffect(() => {
+    if (!ready || navigator.webdriver) return;
+    try {
+      if (localStorage.getItem('jarlheim.welcomed')) return;
+      localStorage.setItem('jarlheim.welcomed', '1');
+    } catch {
+      return;
+    }
+    setPanel('chat');
+  }, [ready]);
 
   // Labels in the 3D scene follow the language too.
   useEffect(() => {
@@ -528,6 +551,9 @@ function Game({
       {panel === 'reports' && (
         <ReportsPanel state={state} onOpen={openReport} onClose={() => setPanel(null)} />
       )}
+      {panel === 'chat' && (
+        <ChatPanel state={state} onClose={() => setPanel(null)} onOpenWorld={() => setPanel('world')} />
+      )}
       {panel === 'world' && (
         <WorldMap
           store={store}
@@ -652,6 +678,9 @@ function Game({
           data-testid="settings-button"
         >
           <GearIcon size={24} />
+        </button>
+        <button onClick={() => openPanel('chat')} aria-label={t('chat')} data-testid="chat-button">
+          <span className="emoji-icon">💬</span>
         </button>
         <button
           className="globe"

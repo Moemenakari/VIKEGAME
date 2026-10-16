@@ -9,8 +9,12 @@ import type {
   FriendEntry,
   Reaction,
 } from './types';
+import { USERNAME_RE } from './types';
 
 const IMAGE_BUCKET = 'chat-images';
+
+/** Username accounts use a private, never-mailed address under our own name. */
+const emailFor = (username: string) => `${username}@players.jarlheim.game`;
 const ONLINE_MS = 2 * 60 * 1000;
 
 interface ProfileRow {
@@ -66,20 +70,9 @@ export class SupabaseBackend implements ChatBackend {
   }
 
   async connect(): Promise<ConnectResult> {
-    let { data } = await this.sb.auth.getSession();
-    if (!data.session) {
-      // Play first, sign up later: every player starts with an anonymous account.
-      const res = await this.sb.auth.signInAnonymously();
-      if (res.error) {
-        throw new Error(
-          /anonymous/i.test(res.error.message)
-            ? 'Online play is not switched on yet (anonymous sign-ins are disabled on the server).'
-            : `Could not sign in: ${res.error.message}`,
-        );
-      }
-      ({ data } = await this.sb.auth.getSession());
-    }
-    const uid = data.session!.user.id;
+    const { data } = await this.sb.auth.getSession();
+    if (!data.session) return { signedIn: false, me: null };
+    const uid = data.session.user.id;
     const { data: row, error } = await this.sb
       .from('profiles')
       .select('id, display_name, vip_level, vip_points')
@@ -88,7 +81,63 @@ export class SupabaseBackend implements ChatBackend {
     fail(error);
     this.me = row ? toProfile(row as ProfileRow) : null;
     if (this.me) this.startPresence();
-    return { me: this.me };
+    return { signedIn: true, me: this.me };
+  }
+
+  async signInGoogle(): Promise<void> {
+    const { error } = await this.sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: location.origin + location.pathname },
+    });
+    if (error)
+      throw new Error(
+        /provider is not enabled/i.test(error.message)
+          ? 'Google sign-in is not switched on yet'
+          : error.message,
+      );
+  }
+
+  async signUp(username: string, password: string): Promise<ChatProfile> {
+    const name = username.trim().toLowerCase();
+    if (!USERNAME_RE.test(name)) throw new Error('Usernames are 3 to 16 letters, numbers or _');
+    if (password.length < 6) throw new Error('Passwords need at least 6 characters');
+    const { data, error } = await this.sb.auth.signUp({ email: emailFor(name), password });
+    if (error) throw new Error(/registered/i.test(error.message) ? 'That name is taken' : error.message);
+    if (!data.session)
+      throw new Error('Account created, but the server asks for an email check (switch it off in Supabase)');
+    return this.createProfile(username.trim());
+  }
+
+  async signIn(username: string, password: string): Promise<ConnectResult> {
+    const { error } = await this.sb.auth.signInWithPassword({
+      email: emailFor(username.trim().toLowerCase()),
+      password,
+    });
+    if (error) throw new Error('Wrong username or password');
+    return this.connect();
+  }
+
+  async playAsGuest(): Promise<ConnectResult> {
+    const res = await this.sb.auth.signInAnonymously();
+    if (res.error) {
+      throw new Error(
+        /anonymous/i.test(res.error.message)
+          ? 'Guest play is not switched on yet'
+          : `Could not sign in: ${res.error.message}`,
+      );
+    }
+    return this.connect();
+  }
+
+  async signOut(): Promise<void> {
+    if (this.presence) clearInterval(this.presence);
+    this.presence = null;
+    this.me = null;
+    await this.sb.auth.signOut();
+  }
+
+  async joinAllianceChat(realm: number, alliance: number | null): Promise<void> {
+    fail((await this.sb.rpc('join_alliance_chat', { realm, alliance })).error);
   }
 
   async createProfile(name: string): Promise<ChatProfile> {

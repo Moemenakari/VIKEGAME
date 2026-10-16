@@ -2,7 +2,17 @@
 
 export const REALM_CHANNEL_ID = '00000000-0000-0000-0000-000000000001';
 
-export const REACTIONS = ['👍', '⚔️', '🛡️', '😂', '❤️', '🔥'] as const;
+/** Each realm (server) has its own chat: realms 1–4. */
+export const realmChannelId = (realm: number) => `00000000-0000-0000-0000-00000000000${realm}`;
+
+/** One alliance chat per alliance per realm (see supabase/migrations/…_0004). */
+export const allianceChannelId = (realm: number, alliance: number) =>
+  `00000000-0000-0000-00${String(realm).padStart(2, '0')}-0000000000${String(alliance + 1).padStart(2, '0')}`;
+
+/** Usernames for username + password accounts. */
+export const USERNAME_RE = /^[a-z0-9_]{3,16}$/;
+
+export const REACTIONS = ['🌹', '❤️', '👍', '⚔️', '🛡️', '😂', '🔥'] as const;
 export type Reaction = (typeof REACTIONS)[number];
 
 export interface ChatProfile {
@@ -47,6 +57,9 @@ export interface FriendEntry {
 }
 
 export interface ConnectResult {
+  /** Signed in (Google, username + password, or guest)? */
+  signedIn: boolean;
+  /** The chat profile, once created. */
   me: ChatProfile | null;
 }
 
@@ -54,6 +67,16 @@ export interface ConnectResult {
 export interface ChatBackend {
   readonly kind: 'supabase' | 'local';
   connect(): Promise<ConnectResult>;
+  /** Google sign-in: leaves the page and comes back signed in. */
+  signInGoogle(): Promise<void>;
+  /** Username + password account (the name becomes your chat name). */
+  signUp(username: string, password: string): Promise<ChatProfile>;
+  signIn(username: string, password: string): Promise<ConnectResult>;
+  /** Play first, sign up later. */
+  playAsGuest(): Promise<ConnectResult>;
+  signOut(): Promise<void>;
+  /** Puts you in your alliance's chat (or takes you out with null). */
+  joinAllianceChat(realm: number, alliance: number | null): Promise<void>;
   createProfile(name: string): Promise<ChatProfile>;
   claimDaily(): Promise<ChatProfile>;
   channels(): Promise<ChatChannel[]>;

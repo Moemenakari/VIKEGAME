@@ -1537,3 +1537,205 @@ body,
 .world-side .round {
   color: var(--gold-hi);
 }
+
+/* ---- chat & accounts ---------------------------------------------------------- */
+.card.chat {
+  top: calc(var(--safe-top) + 60px);
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  z-index: 6;
+}
+
+.emoji-icon {
+  font-size: 24px;
+}
+
+.chat-me {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-end: 40px;
+}
+
+.chat-me strong {
+  color: var(--gold-hi);
+}
+
+.vip {
+  margin-inline-start: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #e0a93a, #9a6a14);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.chat-tabs {
+  margin: 10px 0 8px;
+}
+
+.chat-tabs button {
+  font-size: 18px;
+}
+
+.conversation {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.messages {
+  flex: 1;
+  min-height: 160px;
+  max-height: 46vh;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 6px 2px;
+}
+
+.msg {
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  user-select: text;
+}
+
+.msg.mine {
+  justify-self: end;
+  background: rgba(227, 181, 82, 0.18);
+}
+
+.msg .who {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.msg p {
+  margin: 2px 0 0 !important;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.msg img {
+  display: block;
+  max-width: 100%;
+  max-height: 200px;
+  margin-top: 4px;
+  border-radius: 8px;
+}
+
+.reacts {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.reacts button {
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.reacts small {
+  margin-inline-start: 2px;
+}
+
+.composer {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.composer input,
+.sign-in input,
+.chat input:not([type='checkbox']) {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-edge);
+  background: #120e09;
+  color: var(--ink);
+  font: 15px var(--body);
+  user-select: text;
+}
+
+.sign-in {
+  display: grid;
+  gap: 10px;
+}
+
+.pw-form {
+  display: grid;
+  gap: 8px;
+}
+
+.card button.google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 46px;
+  border-radius: 10px;
+  border: 0;
+  background: #fff;
+  color: #1f1f1f;
+  font: 600 15px var(--body);
+  cursor: pointer;
+}
+
+.card button.link {
+  border: 0;
+  background: none;
+  color: var(--gold-hi);
+  font: 600 13px var(--body);
+  text-decoration: underline;
+  cursor: pointer;
+  justify-self: start;
+}
+
+.channel-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.channel-list .friend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6b6b6b;
+}
+
+.dot.on {
+  background: #7fe07a;
+}
+
+.badge-dot.static {
+  position: static;
+}
