@@ -11,7 +11,6 @@ import {
   sumCounts,
   tileAt,
   tileGarrison,
-  tileKey,
   tileLimit,
   tileOwner,
   cleanSnapshot,
@@ -26,21 +25,13 @@ import { t, troopName } from './i18n';
 import type { Online } from './useOnline';
 import type { RealmPlayer } from '../online/realm';
 import { AvatarFace, ResourceIcon, TroopTypeIcon } from './icons';
+import { paintBase, paintTerritory } from './worldArt';
 
 /**
  * Midgard: the world map of your realm (server). Alliances and their land, the
  * Law Rock in the middle with the King, trading towns, ring forts, your hold and
  * the land you have taken. Drawn on one canvas in one pass (no DOM per tile).
  */
-const KIND_COLOR: Record<string, string> = {
-  sea: '#1d4a6e',
-  field: '#d9dccf',
-  forest: '#7f9a7a',
-  hills: '#a29d94',
-  town: '#d9dccf',
-  fort: '#b8b2a4',
-  capital: '#e8d9a8',
-};
 
 export function WorldMap({
   store,
@@ -64,7 +55,18 @@ export function WorldMap({
   useEffect(() => void refresh(realmId), [refresh, realmId]);
   const others = online.players.filter((p) => p.realm === realmId && p.id !== online.userId);
   const map = useMemo(() => realmMap(realmId), [realmId]);
+  const base = useMemo(() => paintBase(map), [map]);
   const mine = realmId === state.world.realm;
+  const tileOwnerOf = (tile: Tile) => tileOwner(state, tile);
+  const ownedKey = realmId === state.world.realm ? state.world.owned.join(';') : '';
+  const territory = useMemo(
+    () =>
+      paintTerritory(map, base, (x, y) => {
+        const tile = tileAt(map, x, y)!;
+        return realmId === state.world.realm ? tileOwnerOf(tile) : tile.owner;
+      }),
+    [map, base, ownedKey],
+  );
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [view, setView] = useState(() => {
     // Start between your hold and the Law Rock, so both are in sight.
@@ -87,58 +89,45 @@ export function WorldMap({
     canvas.height = h * dpr;
     const ctx = canvas.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = KIND_COLOR.sea!;
+    ctx.fillStyle = '#123a5c';
     ctx.fillRect(0, 0, w, h);
+    // Never smaller than the screen: the map always fills it, in portrait too.
+    const fill = Math.max(w, h) / map.size;
+    if (view.scale < fill - 0.01) {
+      setView((v) => ({ ...v, scale: fill }));
+      return;
+    }
     const s = view.scale;
-    const ox = w / 2 - view.x * s;
-    const oy = h / 2 - view.y * s;
-    const owned = new Set(mine ? state.world.owned : []);
-    for (const tile of map.tiles) {
-      const px = ox + tile.x * s;
-      const py = oy + tile.y * s;
-      if (px < -s || py < -s || px > w || py > h) continue;
-      ctx.fillStyle = KIND_COLOR[tile.kind]!;
-      ctx.fillRect(px, py, s + 0.5, s + 0.5);
-      const owner = mine ? tileOwner(state, tile) : tile.owner;
-      if (owner !== null && tile.kind !== 'sea') {
-        ctx.fillStyle = owner === -1 ? 'rgba(255, 214, 119, 0.55)' : hexA(ALLIANCES[owner]!.color, 0.42);
-        ctx.fillRect(px, py, s + 0.5, s + 0.5);
-      }
-      if (owned.has(tileKey(tile.x, tile.y))) {
-        ctx.strokeStyle = '#ffd677';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(px + 1, py + 1, s - 2, s - 2);
-      }
-      if (s >= 16 && tile.kind === 'forest') {
-        ctx.fillStyle = '#3f5e3a';
-        ctx.beginPath();
-        ctx.moveTo(px + s * 0.5, py + s * 0.2);
-        ctx.lineTo(px + s * 0.75, py + s * 0.75);
-        ctx.lineTo(px + s * 0.25, py + s * 0.75);
-        ctx.fill();
-      }
-      if (s >= 16 && tile.kind === 'hills') {
-        ctx.fillStyle = '#7c776f';
-        ctx.beginPath();
-        ctx.moveTo(px + s * 0.15, py + s * 0.8);
-        ctx.lineTo(px + s * 0.45, py + s * 0.3);
-        ctx.lineTo(px + s * 0.75, py + s * 0.8);
-        ctx.fill();
-      }
+    // Keep the map filling the screen: never pan past its edge into empty sea.
+    const clampAxis = (c: number, span: number) => {
+      const half = span / 2 / s;
+      return map.size * s <= span ? map.size / 2 : Math.min(map.size - half, Math.max(half, c));
+    };
+    const vx = clampAxis(view.x, w);
+    const vy = clampAxis(view.y, h);
+    if (vx !== view.x || vy !== view.y) {
+      setView((v) => ({ ...v, x: vx, y: vy }));
+      return;
     }
-    // Grid lines, faintly, when zoomed in.
-    if (s >= 20) {
-      ctx.strokeStyle = 'rgba(0,0,0,0.08)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let i = 0; i <= map.size; i++) {
-        ctx.moveTo(ox + i * s, oy);
-        ctx.lineTo(ox + i * s, oy + map.size * s);
-        ctx.moveTo(ox, oy + i * s);
-        ctx.lineTo(ox + map.size * s, oy + i * s);
-      }
-      ctx.stroke();
-    }
+    const ox = w / 2 - vx * s;
+    const oy = h / 2 - vy * s;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(base, ox, oy, map.size * s, map.size * s);
+    ctx.drawImage(territory, ox, oy, map.size * s, map.size * s);
+    // The edge of the known world fades into mist.
+    const fog = ctx.createRadialGradient(
+      ox + (map.size * s) / 2,
+      oy + (map.size * s) / 2,
+      map.size * s * 0.42,
+      ox + (map.size * s) / 2,
+      oy + (map.size * s) / 2,
+      map.size * s * 0.62,
+    );
+    fog.addColorStop(0, 'rgba(18,58,92,0)');
+    fog.addColorStop(1, 'rgba(18,58,92,0.85)');
+    ctx.fillStyle = fog;
+    ctx.fillRect(0, 0, w, h);
     const icon = (x: number, y: number, glyph: string, size: number) => {
       ctx.font = `${size}px serif`;
       ctx.textAlign = 'center';
@@ -146,7 +135,7 @@ export function WorldMap({
       ctx.fillText(glyph, ox + (x + 0.5) * s, oy + (y + 0.5) * s);
     };
     const label = (x: number, y: number, text: string, color = '#fff') => {
-      ctx.font = `700 ${Math.max(10, s * 0.42)}px system-ui, sans-serif`;
+      ctx.font = `700 ${Math.min(15, Math.max(10, s * 0.42))}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.lineWidth = 3;
       ctx.strokeStyle = 'rgba(0,0,0,0.75)';
@@ -158,16 +147,16 @@ export function WorldMap({
     icon(c, c, '👑', s * 1.6);
     label(c, c + 0.6, `${t('lawRock')} · ${map.realm.king}`, '#ffd677');
     for (const seat of map.seats) {
-      icon(seat.x, seat.y, '🏰', s * 0.95);
+      icon(seat.x, seat.y, '🏰', Math.max(14, s * 0.95));
       label(seat.x, seat.y, `[${ALLIANCES[seat.alliance]!.tag}]`, ALLIANCES[seat.alliance]!.color);
     }
     for (const town of map.towns) {
-      icon(town.x, town.y, '⚖️', s * 0.8);
-      label(town.x, town.y, town.name);
+      icon(town.x, town.y, '⚖️', Math.max(12, s * 0.8));
+      if (s >= 12) label(town.x, town.y, town.name);
     }
     for (const p of others) {
-      icon(p.x, p.y, '🏠', s * 0.9);
-      label(p.x, p.y, p.alliance ? `[${p.alliance.tag}] ${p.name}` : p.name, '#bfe9ff');
+      icon(p.x, p.y, '🏠', Math.max(12, s * 0.9));
+      if (s >= 18) label(p.x, p.y, p.alliance ? `[${p.alliance.tag}] ${p.name}` : p.name, '#bfe9ff');
     }
     if (mine) {
       icon(state.world.home.x, state.world.home.y, '🛖', s * 1.05);
@@ -178,12 +167,12 @@ export function WorldMap({
       ctx.lineWidth = 3;
       ctx.strokeRect(ox + picked.x * s, oy + picked.y * s, s, s);
     }
-  }, [map, view, state, mine, picked, others]);
+  }, [map, view, state, mine, picked, others, base, territory]);
 
   // Pan with one finger, pinch or wheel to zoom, tap to pick a tile.
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const press = useRef<{ x: number; y: number; moved: boolean } | null>(null);
-  const clampScale = (v: number) => Math.min(48, Math.max(8, v));
+  const clampScale = (v: number) => Math.min(48, Math.max(7, v));
   const onDown = (e: React.PointerEvent) => {
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -550,11 +539,6 @@ function TileCard({
       )}
     </div>
   );
-}
-
-function hexA(hex: string, a: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
 /** Player alliances of the realm: found one (Great Hall 5) or join one; each has its own chat. */
