@@ -1919,3 +1919,191 @@ body,
   border-radius: 10px;
   background: rgba(63, 127, 168, 0.15);
 }
+
+/* ---- "you can't yet" lines that take you to the cause ---------------------------- */
+.card button.need-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px dashed #ff9b7a;
+  background: rgba(168, 64, 47, 0.15);
+  color: #ffb39a;
+  font: 600 13px var(--body);
+  text-align: start;
+  cursor: pointer;
+}
+
+.card button.need-link b {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #6fa53a, #3f6e1c);
+  color: #fff;
+}
+
+[dir='rtl'] .card button.need-link b {
+  transform: scaleX(-1);
+}
+
+.build-option .desc.need {
+  color: #ffb39a;
+  font-weight: 600;
+}
+
+.build-option.blocked-option {
+  opacity: 0.85;
+}
+
+/* ---- profile page, bag, settings ------------------------------------------------- */
+.card.profile-page {
+  top: calc(var(--safe-top) + 60px);
+  max-height: none;
+  z-index: 6;
+}
+
+.profile-id {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.profile-id .muted {
+  margin: 0;
+}
+
+.card button.id-chip {
+  justify-self: start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-edge);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-muted);
+  font: 600 12px ui-monospace, monospace;
+  cursor: pointer;
+}
+
+.profile-stats {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.bag-resources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-weight: 700;
+}
+
+.bag-resources span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bag-items {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.bag-items li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.bag-icon {
+  font-size: 24px;
+}
+
+.bag-count {
+  color: var(--gold-hi);
+}
+
+.use-targets {
+  flex-basis: 100%;
+  display: grid;
+  gap: 6px;
+}
+
+.use-targets .muted {
+  margin: 0;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 14px;
+}
+
+.card button.switch {
+  position: relative;
+  flex: none;
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  border: 1px solid var(--panel-edge);
+  background: #3a3a3a;
+  cursor: pointer;
+}
+
+.card button.switch i {
+  position: absolute;
+  top: 3px;
+  inset-inline-start: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ddd;
+  transition: inset-inline-start 0.15s;
+}
+
+.card button.switch.on {
+  background: #4f8a2a;
+}
+
+.card button.switch.on i {
+  inset-inline-start: 23px;
+}
+
+.support-form {
+  display: grid;
+  gap: 8px;
+}
+
+.support-form select,
+.support-form textarea {
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-edge);
+  background: #120e09;
+  color: var(--ink);
+  font: 14px var(--body);
+  user-select: text;
+}
+
+.support-form button {
+  justify-self: end;
+}
+
+.legal-text {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+}

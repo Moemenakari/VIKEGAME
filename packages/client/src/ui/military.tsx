@@ -25,7 +25,8 @@ import {
 import { useState } from 'react';
 import type { GameStore } from '../game/store';
 import { formatAmount, formatDuration } from './format';
-import { errorText, t, troopName } from './i18n';
+import { t, troopName } from './i18n';
+import { NeedLink } from './NeedLink';
 import { ResourceIcon, TroopTypeIcon } from './icons';
 
 type Run = (cmd: Command, close?: boolean) => void;
@@ -157,7 +158,7 @@ export function TrainSection({
         <CostLine cost={trainCost(troopId, n)} state={state} />
         <span className="time">⏱ {formatDuration(trainDurationMs(troopId, n))}</span>
       </div>
-      {!check.ok && <p className="blocked">{errorText(check.error.message)}</p>}
+      {!check.ok && <NeedLink error={check.error} />}
       <button
         className="primary"
         disabled={!check.ok}

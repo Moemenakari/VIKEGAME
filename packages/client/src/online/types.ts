@@ -9,6 +9,8 @@ export const realmChannelId = (realm: number) => `00000000-0000-0000-0000-000000
 export const allianceChannelId = (realm: number, alliance: number) =>
   `00000000-0000-0000-00${String(realm).padStart(2, '0')}-0000000000${String(alliance + 1).padStart(2, '0')}`;
 
+export type TicketTopic = 'bug' | 'account' | 'payment' | 'player' | 'idea' | 'other';
+
 /** Usernames for username + password accounts. */
 export const USERNAME_RE = /^[a-z0-9_]{3,16}$/;
 
@@ -75,6 +77,12 @@ export interface ChatBackend {
   /** Play first, sign up later. */
   playAsGuest(): Promise<ConnectResult>;
   signOut(): Promise<void>;
+  /** Likes and roses your messages received, and how many you sent. */
+  socialStats(): Promise<{ likes: number; roses: number; messages: number }>;
+  /** Customer service: open a ticket (answered in the game later). */
+  openTicket(topic: TicketTopic, body: string, meta: Record<string, string>): Promise<void>;
+  /** Deletes the account and everything online tied to it. */
+  deleteAccount(): Promise<void>;
   /** Puts you in your alliance's chat (or takes you out with null). */
   joinAllianceChat(realm: number, alliance: number | null): Promise<void>;
   createProfile(name: string): Promise<ChatProfile>;

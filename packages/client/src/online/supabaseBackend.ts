@@ -9,7 +9,7 @@ import type {
   FriendEntry,
   Reaction,
 } from './types';
-import { USERNAME_RE } from './types';
+import { USERNAME_RE, type TicketTopic } from './types';
 
 const IMAGE_BUCKET = 'chat-images';
 
@@ -139,6 +139,27 @@ export class SupabaseBackend implements ChatBackend {
     this.presence = null;
     this.me = null;
     await this.sb.auth.signOut();
+  }
+
+  async socialStats() {
+    const { data, error } = await this.sb.rpc('my_social_stats');
+    fail(error);
+    return data as { likes: number; roses: number; messages: number };
+  }
+
+  async openTicket(topic: TicketTopic, body: string, meta: Record<string, string>): Promise<void> {
+    fail((await this.sb.from('support_tickets').insert({ topic, body, meta })).error);
+  }
+
+  async deleteAccount(): Promise<void> {
+    const { error } = await this.sb.rpc('delete_my_account');
+    if (error) {
+      // Not switched on yet on the server: ask customer service to do it instead.
+      await this.openTicket('account', 'Please delete my account and all my data.', {
+        reason: 'delete-account',
+      });
+    }
+    await this.signOut();
   }
 
   async joinAllianceChat(realm: number, alliance: number | null): Promise<void> {

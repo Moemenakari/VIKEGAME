@@ -5,6 +5,7 @@ import {
   STATE_VERSION,
   emptyMilitary,
   freshProfile,
+  freshBag,
   freshRaids,
   freshWorld,
   plotSpot,
@@ -41,6 +42,8 @@ const migrations: Record<number, (state: Record<string, unknown>) => Record<stri
   4: (state) => ({ ...freshWorld(), ...state }),
   // v5 → v6: heroes (Bóndi Ketil leads from the start, plus a few Saga Horns).
   5: (state) => ({ heroes: freshHeroes(), ...state }),
+  // v6 → v7: the Bag and the profile's deeds.
+  6: (state) => ({ ...freshBag(), ...state }),
 };
 
 export function serialize(state: GameState): string {
@@ -96,6 +99,7 @@ function isGameState(s: unknown): s is GameState {
   if (!Array.isArray(q.chests)) return false;
   const p = s.profile;
   if (!isObj(p) || typeof p.name !== 'string' || !isNum(p.avatar) || !Array.isArray(p.owned)) return false;
+  if (!isCounts(s.items) || !isObj(s.stats) || !isNum(s.stats.kills)) return false;
   const hz = s.heroes;
   if (!isObj(hz) || !isObj(hz.owned) || !Array.isArray(hz.squad) || !isNum(hz.horns) || !isObj(hz.pity))
     return false;

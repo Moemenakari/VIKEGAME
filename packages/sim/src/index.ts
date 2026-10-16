@@ -28,3 +28,5 @@ export * from './systems/world';
 export * from './data/heroes';
 export * from './systems/heroes';
 export * from './systems/pvp';
+export * from './data/items';
+export * from './systems/items';

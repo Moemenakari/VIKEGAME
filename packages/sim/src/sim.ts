@@ -7,6 +7,8 @@ import { HERO_RULES } from './data/heroes';
 import { drawHero, grantHero, heroMaxLevel, heroMods } from './systems/heroes';
 import { ALLIANCES, REALMS, WORLD } from './data/world';
 import { cleanSnapshot, fightPlayer, sufferAttack, type DefenceSnapshot } from './systems/pvp';
+import { BATTLE_DROPS, CHEST_ITEMS } from './data/items';
+import { addItems, killsOf, recordBattle, useItem, type ItemTarget } from './systems/items';
 import { bordersHold, realmMap, tileAt, tileGarrison, tileKey, tileLimit, tileOwner } from './systems/world';
 import type { Cost } from './data/resources';
 import { DAILY_QUESTS } from './data/quests';
@@ -15,7 +17,12 @@ import { activityPoints, mainGoalDone } from './systems/goals';
 import { DRAUGR_BANDS, DRAUGR_UNITS } from './data/draugr';
 import { MILITARY, TRAINED_AT, TROOPS } from './data/troops';
 import { createRng } from './rng';
-import { PRODUCED_RESOURCES, RESOURCE_NAMES, type ProducedResourceId } from './data/resources';
+import {
+  PRODUCED_RESOURCES,
+  RESOURCE_NAMES,
+  type ProducedResourceId,
+  type ResourceId,
+} from './data/resources';
 import type { GameEvent } from './events';
 import type { BattleReport, ConstructionJob, GameState, ReportLine } from './state';
 import { resolveBattle, type Combatant } from './systems/combat';
@@ -55,6 +62,7 @@ export type Command =
   | { type: 'levelHero'; heroId: string }
   | { type: 'setSquad'; squad: string[] }
   | { type: 'setHome'; realm: number; x: number; y: number }
+  | { type: 'useItem'; itemId: string; count: number; target?: ItemTarget }
   | {
       type: 'attackPlayer';
       targetId: string;
@@ -104,7 +112,16 @@ export type RuleErrorCode =
 export interface RuleError {
   code: RuleErrorCode;
   message: string;
+  /** What would unblock this, so the UI can send the player straight there (owner request). */
+  need?: Need;
 }
+
+/** The thing that blocks an action: a building at a level, a resource, a free builder, or Silver for heroes. */
+export type Need =
+  | { kind: 'building'; building: BuildingType; level: number }
+  | { kind: 'resource'; resource: ResourceId }
+  | { kind: 'builder' }
+  | { kind: 'troops' };
 
 export interface StepResult {
   state: GameState;
@@ -113,7 +130,8 @@ export interface StepResult {
 
 export type ApplyResult = ({ ok: true } & StepResult) | { ok: false; error: RuleError };
 
-const fail = (code: RuleErrorCode, message: string): RuleError => ({ code, message });
+const fail = (code: RuleErrorCode, message: string, need?: Need): RuleError =>
+  need ? { code, message, need } : { code, message };
 
 // ---- time ------------------------------------------------------------------
 
@@ -247,10 +265,15 @@ function startJob(
 }
 
 function checkBuilderAndCost(state: GameState, type: BuildingType, targetLevel: number): RuleError | null {
-  if (state.queue.length >= builderSlots(state)) return fail('NO_BUILDER', 'All builders are busy');
+  if (state.queue.length >= builderSlots(state))
+    return fail('NO_BUILDER', 'All builders are busy', { kind: 'builder' });
   const cost = upgradeCost(type, targetLevel);
   const missing = canAfford(state.resources, cost);
-  if (missing) return fail('NOT_ENOUGH', `Not enough ${RESOURCE_NAMES[missing]}`);
+  if (missing)
+    return fail('NOT_ENOUGH', `Not enough ${RESOURCE_NAMES[missing]}`, {
+      kind: 'resource',
+      resource: missing,
+    });
   return null;
 }
 
@@ -266,7 +289,11 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     const def = BUILDINGS[cmd.building];
     if (!def || cmd.building === 'greatHall') return fail('UNKNOWN', 'You cannot build that here');
     if (hallLevel(state) < def.unlockHall)
-      return fail('LOCKED', `${def.name} unlocks at Great Hall ${def.unlockHall}`);
+      return fail('LOCKED', `${def.name} unlocks at Great Hall ${def.unlockHall}`, {
+        kind: 'building',
+        building: 'greatHall',
+        level: def.unlockHall,
+      });
     if (countOfType(state, cmd.building) >= def.maxCount) {
       return fail('LIMIT', `Your hold can have ${def.maxCount} × ${def.name}`);
     }
@@ -324,10 +351,10 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
       const count = Math.floor(n);
       if (count <= 0) continue;
       if (!TROOPS[id] || TROOPS[id].type === 'ship' || (state.army.troops[id] ?? 0) < count)
-        return fail('NOT_ENOUGH', 'Not enough troops at home');
+        return fail('NOT_ENOUGH', 'Not enough troops at home', { kind: 'troops' });
       sent[id] = count;
     }
-    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send');
+    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send', { kind: 'troops' });
 
     const rng = createRng(state.rngState);
     const garrison = tileGarrison(tile, owner);
@@ -358,7 +385,9 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
       });
     }
     const reward: Cost = {};
+    recordBattle(state, outcome.attackerWon, killsOf(outcome.defender), BATTLE_DROPS.landTaken);
     if (outcome.attackerWon) {
+      state.stats.landTaken++;
       state.world.owned.push(tileKey(tile.x, tile.y));
       for (const [r, v] of Object.entries(WORLD.conquestReward)) reward[r as keyof Cost] = v * tile.level;
       grant(state.resources, reward);
@@ -424,12 +453,22 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     const h = state.heroes.owned[cmd.heroId];
     if (!h) return fail('UNKNOWN', 'You do not have this hero');
     if (h.level >= heroMaxLevel(state))
-      return fail('REQUIREMENT', 'Upgrade the Great Hall to train heroes higher');
+      return fail('REQUIREMENT', 'Upgrade the Great Hall to train heroes higher', {
+        kind: 'building',
+        building: 'greatHall',
+        level: hallLevel(state) + 1,
+      });
     const cost = HERO_RULES.levelCost(h.level);
-    if (state.resources.silver < cost) return fail('NOT_ENOUGH', 'Not enough Silver');
+    if (state.resources.silver < cost)
+      return fail('NOT_ENOUGH', 'Not enough Silver', { kind: 'resource', resource: 'silver' });
     state.resources.silver -= cost;
     h.level++;
     return null;
+  },
+
+  useItem(state, cmd, now) {
+    const err = useItem(state, cmd.itemId, cmd.count, cmd.target, now);
+    return err ? fail('NOT_READY', err) : null;
   },
 
   setHome(state, cmd) {
@@ -448,10 +487,10 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
       const count = Math.floor(n);
       if (count <= 0) continue;
       if (!TROOPS[id] || TROOPS[id].type === 'ship' || (state.army.troops[id] ?? 0) < count)
-        return fail('NOT_ENOUGH', 'Not enough troops at home');
+        return fail('NOT_ENOUGH', 'Not enough troops at home', { kind: 'troops' });
       sent[id] = count;
     }
-    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send');
+    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send', { kind: 'troops' });
     fightPlayer(
       state,
       sent,
@@ -488,12 +527,20 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     if (target > ECONOMY.maxBuildingLevel) return fail('MAX_LEVEL', 'Already at the highest level');
     const def = BUILDINGS[b.type];
     if (b.id !== HALL_PLOT_ID && target > hallLevel(state)) {
-      return fail('REQUIREMENT', `Upgrade the Great Hall to level ${target} first`);
+      return fail('REQUIREMENT', `Upgrade the Great Hall to level ${target} first`, {
+        kind: 'building',
+        building: 'greatHall',
+        level: target,
+      });
     }
     for (const req of def.requires ?? []) {
       const needed = target + req.levelOffset;
       if (target >= req.fromLevel && maxLevelOfType(state, req.type) < needed) {
-        return fail('REQUIREMENT', `Needs ${BUILDINGS[req.type].name} level ${needed}`);
+        return fail('REQUIREMENT', `Needs ${BUILDINGS[req.type].name} level ${needed}`, {
+          kind: 'building',
+          building: req.type,
+          level: needed,
+        });
       }
     }
     const err = checkBuilderAndCost(state, b.type, target);
@@ -532,7 +579,11 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
       return fail('UNKNOWN', 'That cannot be trained here');
     if (b.level < 1) return fail('NOT_READY', `${BUILDINGS[b.type].name} is still being raised`);
     if (b.level < troop.unlockLevel) {
-      return fail('LOCKED', `${troop.name} needs ${BUILDINGS[b.type].name} level ${troop.unlockLevel}`);
+      return fail('LOCKED', `${troop.name} needs ${BUILDINGS[b.type].name} level ${troop.unlockLevel}`, {
+        kind: 'building',
+        building: b.type,
+        level: troop.unlockLevel,
+      });
     }
     if (state.training.some((j) => j.buildingId === b.id)) return fail('BUSY', 'Already training a batch');
     const count = Math.floor(cmd.count);
@@ -541,7 +592,11 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     if (count > limit) return fail('LIMIT', `At most ${limit} per batch at this level`);
     const cost = trainCost(troop.id, count);
     const missing = canAfford(state.resources, cost);
-    if (missing) return fail('NOT_ENOUGH', `Not enough ${RESOURCE_NAMES[missing]}`);
+    if (missing)
+      return fail('NOT_ENOUGH', `Not enough ${RESOURCE_NAMES[missing]}`, {
+        kind: 'resource',
+        resource: missing,
+      });
     pay(state.resources, cost);
     state.training.push({
       buildingId: b.id,
@@ -560,7 +615,11 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     if (count === 0) return fail('NOT_READY', 'No one is wounded');
     const cost = healCost(state.army.wounded);
     const missing = canAfford(state.resources, cost);
-    if (missing) return fail('NOT_ENOUGH', `Not enough ${RESOURCE_NAMES[missing]}`);
+    if (missing)
+      return fail('NOT_ENOUGH', `Not enough ${RESOURCE_NAMES[missing]}`, {
+        kind: 'resource',
+        resource: missing,
+      });
     pay(state.resources, cost);
     state.healing = {
       troops: { ...state.army.wounded },
@@ -583,10 +642,10 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
       const count = Math.floor(n);
       if (count <= 0) continue;
       if (!TROOPS[id] || TROOPS[id].type === 'ship' || (state.army.troops[id] ?? 0) < count)
-        return fail('NOT_ENOUGH', 'Not enough troops at home');
+        return fail('NOT_ENOUGH', 'Not enough troops at home', { kind: 'troops' });
       sent[id] = count;
     }
-    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send');
+    if (sumCounts(sent) === 0) return fail('NOT_READY', 'Choose warriors to send', { kind: 'troops' });
 
     const rng = createRng(state.rngState);
     const attackers: Combatant[] = Object.entries(sent).map(([id, count]) => {
@@ -626,6 +685,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
       });
     }
 
+    recordBattle(state, outcome.attackerWon, killsOf(outcome.defender), BATTLE_DROPS.barrow);
     const reward = outcome.attackerWon ? { ...band.reward } : {};
     if (outcome.attackerWon) {
       grant(state.resources, reward);
@@ -703,6 +763,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     if (activityPoints(state) < chest.points) return fail('NOT_READY', 'Quest not finished yet');
     grant(state.resources, chest.reward);
     if (cmd.index >= 3) state.heroes.horns += 1;
+    addItems(state, CHEST_ITEMS[cmd.index] ?? {});
     state.quests.chests.push(cmd.index);
     events.push({ type: 'quest.claimed', questId: `chest-${cmd.index}`, reward: chest.reward });
     return null;

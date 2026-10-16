@@ -8,6 +8,8 @@ import { resolveBattle, type Combatant } from './combat';
 import { heroMods } from './heroes';
 import { addCounts, sumCounts, woundedCapacity } from './military';
 import { protectedAmount } from './raids';
+import { killsOf, recordBattle } from './items';
+import { BATTLE_DROPS } from '../data/items';
 
 /**
  * Battles between players (asynchronous, like the genre): the attacker's game fights
@@ -139,6 +141,7 @@ export function fightPlayer(
     },
   });
   const attacker = takeLosses(state, outcome.attacker);
+  recordBattle(state, outcome.attackerWon, killsOf(outcome.defender), BATTLE_DROPS.pvpWon);
   const defenderLosses: Record<string, number> = {};
   for (const s of outcome.defender)
     if (s.type !== 'wall' && s.start > s.alive) defenderLosses[s.key] = s.start - s.alive;

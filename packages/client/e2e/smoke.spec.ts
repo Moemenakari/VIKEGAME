@@ -142,14 +142,28 @@ test('the guide arrow leads to the next step, and the language switches to Arabi
   await page.getByTestId('quests-button').click();
   await expect(page.getByTestId('chest-track')).toBeVisible();
   await page.screenshot({ path: 'test-results/quests-daily.png' });
+  // The Shield Yard needs Great Hall 2, which is still being raised: the arrow goes there first.
   await page.getByTestId('go-train-30').click();
-  await expect(page.getByTestId('build-shieldYard')).toHaveClass(/pulse/);
+  await expect(page.getByTestId('finish-free')).toHaveClass(/pulse/);
+  await page.screenshot({ path: 'test-results/arrow-to-blocker.png' });
   await page.getByLabel('Close').click();
 
-  // The profile shows power, server and King; the language lives in Settings.
+  // A locked building in the build menu is a link to what unlocks it.
+  await page.getByTestId('build-button').click();
+  await page.getByTestId('build-market').click();
+  await expect(page.getByTestId('info-card')).toContainText('Great Hall');
+  await page.getByLabel('Close').click();
+
+  // The profile shows power, deeds and the realm; the language lives in Settings.
   await page.getByTestId('profile-button').click();
-  await expect(page.getByTestId('profile-king')).not.toBeEmpty();
-  await page.getByTestId('open-settings').click();
+  await expect(page.getByTestId('profile-main')).toContainText('Uppsala');
+  await page.screenshot({ path: 'test-results/profile.png' });
+  await page.getByTestId('profile-tab-bag').click();
+  await expect(page.getByTestId('bag')).toContainText('War Spoils');
+  await page.getByTestId('use-chest-spoils').click();
+  await page.screenshot({ path: 'test-results/bag.png' });
+  await page.getByTestId('profile-tab-settings').click();
+  await page.screenshot({ path: 'test-results/settings.png' });
   await page.getByTestId('lang-ar').click();
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await page.getByLabel('إغلاق').click();
@@ -158,6 +172,7 @@ test('the guide arrow leads to the next step, and the language switches to Arabi
 
   // Profile: pick a free picture.
   await page.getByTestId('profile-button').click();
+  await page.getByTestId('profile-tab-profile').click();
   await page.getByTestId('avatar-2').click();
   expect(await page.evaluate(() => window.__jarlheim!.state().profile.avatar)).toBe(2);
 

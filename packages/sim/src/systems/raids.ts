@@ -8,6 +8,8 @@ import type { BattleReport, GameState, IncomingRaid, ReportLine } from '../state
 import { resolveBattle, type BattleOutcome, type Combatant, type StackResult } from './combat';
 import { hallLevel } from './economy';
 import { heroMods } from './heroes';
+import { killsOf, recordBattle } from './items';
+import { BATTLE_DROPS } from '../data/items';
 import { addCounts, armyStrength, homeStrength, sumCounts, woundedCapacity } from './military';
 
 const unitStrength = (id: string) => armyStrength([{ ...TROOPS[id]!, count: 1 }]);
@@ -208,6 +210,14 @@ export function resolveRaid(state: GameState, raid: IncomingRaid, now: number, e
   }
 
   // ---- after
+  if (!raid.practice || !raidersWon)
+    recordBattle(
+      state,
+      !raidersWon,
+      land ? killsOf(land.attacker) : 0,
+      raid.practice ? undefined : BATTLE_DROPS.raidBeaten,
+    );
+  if (!raidersWon && !raid.practice) state.stats.raidsBeaten++;
   const reward: Cost = {};
   const loot: Cost = {};
   if (raidersWon) {

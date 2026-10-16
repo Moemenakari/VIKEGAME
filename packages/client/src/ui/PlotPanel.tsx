@@ -15,8 +15,11 @@ import {
   type BuildingType,
   type Command,
   type GameState,
+  type RuleError,
 } from '@jarlheim/sim';
+import { useContext } from 'react';
 import type { GameStore } from '../game/store';
+import { NeedContext, NeedLink } from './NeedLink';
 import { formatAmount, formatCost, formatDuration } from './format';
 import { bDesc, bName, errorText, t } from './i18n';
 import { ResourceIcon } from './icons';
@@ -36,9 +39,9 @@ interface Props {
 }
 
 /** Asks the pure sim whether a command would work right now, without changing anything. */
-function check(state: GameState, cmd: Command, now: number): string | null {
+function check(state: GameState, cmd: Command, now: number): RuleError | null {
   const r = apply(state, cmd, now);
-  return r.ok ? null : r.error.message;
+  return r.ok ? null : r.error;
 }
 
 function Cost({ cost, state }: { cost: ReturnType<typeof upgradeCost>; state: GameState }) {
@@ -56,6 +59,7 @@ function Cost({ cost, state }: { cost: ReturnType<typeof upgradeCost>; state: Ga
 
 export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, onMove }: Props) {
   const now = store.now();
+  const goNeed = useContext(NeedContext);
   const building = plotId ? state.buildings[plotId] : undefined;
   const run = (cmd: Command, close = false) => {
     const err = store.dispatch(cmd);
@@ -78,21 +82,30 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
             const def = BUILDINGS[type];
             const spot = suggestSpot(state, type);
             const cmd: Command = { type: 'build', building: type, ...(spot ?? { x: 0, z: 0 }) };
-            const blocked =
-              check(state, cmd, now) ?? (spot ? null : 'No free ground: upgrade the Great Hall');
+            const blocked: RuleError | null =
+              check(state, cmd, now) ??
+              (spot
+                ? null
+                : {
+                    code: 'OCCUPIED',
+                    message: 'No free ground: upgrade the Great Hall',
+                    need: { kind: 'building', building: 'greatHall', level: 2 },
+                  });
             return (
               <li key={type}>
                 <button
-                  className="build-option"
-                  disabled={blocked !== null}
-                  onClick={() => onChoose(type)}
+                  className={`build-option ${blocked ? 'blocked-option' : ''}`}
+                  disabled={blocked !== null && !blocked.need}
+                  onClick={() => (blocked?.need ? goNeed(blocked.need) : onChoose(type))}
                   data-testid={`build-${type}`}
                   data-hint={`build-${type}`}
                 >
                   <span className="title">
                     {bName(type)} <em>{def.norse}</em>
                   </span>
-                  <span className="desc">{blocked ? errorText(blocked) : bDesc(type)}</span>
+                  <span className={`desc ${blocked ? 'need' : ''}`}>
+                    {blocked ? `${errorText(blocked.message)}${blocked.need ? ' ➜' : ''}` : bDesc(type)}
+                  </span>
                   <span className="meta">
                     <Cost cost={upgradeCost(type, 1)} state={state} />
                     <span className="time">⏱ {formatDuration(upgradeDurationMs(type, 1, state))}</span>
@@ -178,7 +191,7 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
             <Cost cost={upgradeCost(building.type, next)} state={state} />
             <span className="time">⏱ {formatDuration(upgradeDurationMs(building.type, next, state))}</span>
           </div>
-          {blocked && <p className="blocked">{errorText(blocked)}</p>}
+          {blocked && <NeedLink error={blocked} />}
           <button
             className="primary"
             disabled={blocked !== null}

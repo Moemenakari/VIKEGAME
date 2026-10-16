@@ -121,6 +121,27 @@ export class LocalBackend implements ChatBackend {
     this.me = null;
   }
 
+  tickets: Array<{ topic: string; body: string }> = [];
+
+  async socialStats() {
+    const mine = this.log.filter((m) => m.senderId === this.me?.id);
+    const count = (e: string) =>
+      mine.reduce(
+        (n, m) => n + (m.reactions[e as Reaction]?.filter((u) => u !== this.me?.id).length ?? 0),
+        0,
+      );
+    return { likes: count('👍') + count('❤️'), roses: count('🌹'), messages: mine.length };
+  }
+
+  async openTicket(topic: string, body: string): Promise<void> {
+    if (body.trim().length < 5) throw new Error('Tell us a little more (5 letters at least)');
+    this.tickets.push({ topic, body });
+  }
+
+  async deleteAccount(): Promise<void> {
+    await this.signOut();
+  }
+
   async joinAllianceChat(realm: number, alliance: number | null): Promise<void> {
     this.chans = this.chans.filter((c) => c.kind !== 'clan');
     if (alliance === null) return;

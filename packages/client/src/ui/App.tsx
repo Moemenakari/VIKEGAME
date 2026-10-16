@@ -1,5 +1,4 @@
 import {
-  AVATARS,
   PRODUCED_RESOURCES,
   builderSlots,
   currentMainQuest,
@@ -7,11 +6,9 @@ import {
   storageCap,
   sumCounts,
   totalPower,
-  troopPower,
   type GameEvent,
-  homeRealm,
+  ALLIANCES,
   HEROES,
-  heroPower,
   placementError,
   suggestSpot,
   type BuildingType,
@@ -22,19 +19,9 @@ import { GameStore } from '../game/store';
 import { Engine } from '../scene/Engine';
 import { loadQuality } from '../scene/quality';
 import { formatAmount, formatDuration } from './format';
-import { routeForDaily, routeForGoal, type Route } from './guide';
-import {
-  LANGS,
-  bName,
-  errorText,
-  goalText,
-  questTitle,
-  resName,
-  setLang,
-  t,
-  troopName,
-  useLang,
-} from './i18n';
+import { routeForDaily, routeForGoal, routeForNeed, type Route } from './guide';
+import { NeedContext } from './NeedLink';
+import { bName, errorText, goalText, questTitle, resName, t, troopName, useLang } from './i18n';
 import {
   ArmyIcon,
   AvatarFace,
@@ -55,6 +42,8 @@ import { WorldMap } from './WorldMap';
 import { ChatPanel } from './ChatPanel';
 import { HeroesPanel } from './HeroesPanel';
 import { useOnline } from './useOnline';
+import { ProfilePage } from './ProfilePage';
+import { getPrefs, usePrefs } from './prefs';
 import { QuestsPanel, Reward, claimableQuests } from './QuestsPanel';
 import { ArmyPanel, BarrowPanel, ReportView, ReportsPanel } from './military';
 
@@ -83,6 +72,7 @@ type Panel =
   | 'world'
   | 'chat'
   | 'heroes'
+  | 'bag'
   | null;
 
 /** A building being placed (new) or moved (moveId), at a spot measured from the hall. */
@@ -93,15 +83,6 @@ interface Placing {
   x: number;
   z: number;
   rot: number;
-}
-
-const SNOW_KEY = 'jarlheim.snow';
-function loadSnow(): boolean {
-  try {
-    return localStorage.getItem(SNOW_KEY) !== 'off';
-  } catch {
-    return true;
-  }
 }
 
 /** Turns simulation events into short messages for the player. */
@@ -190,7 +171,7 @@ function Game({
   const [questTab, setQuestTab] = useState<'daily' | 'main'>('daily');
   const [reportId, setReportId] = useState<number | null>(null);
   const [hint, setHint] = useState<string | null>(null);
-  const [snow, setSnow] = useState(loadSnow);
+  const prefs = usePrefs();
   const [placing, setPlacing] = useState<Placing | null>(null);
 
   const select = useCallback((id: string | null) => {
@@ -223,7 +204,7 @@ function Game({
       return;
     }
     engineRef.current = engine;
-    engine.setSnow(loadSnow());
+    engine.setSnow(getPrefs().snow);
     engine.sync(store.snapshot, store.now());
     engine.start();
     const unsubscribe = store.subscribe(() => engine.sync(store.snapshot, store.now()));
@@ -255,6 +236,8 @@ function Game({
     setPanel('chat');
   }, [ready]);
 
+  useEffect(() => engineRef.current?.setSnow(prefs.snow), [prefs.snow]);
+
   // Labels in the 3D scene follow the language too.
   useEffect(() => {
     engineRef.current?.sync(store.snapshot, store.now());
@@ -264,7 +247,17 @@ function Game({
   useEffect(
     () =>
       store.onEvents((events) => {
-        const lines = events.map(describe).filter((x): x is string => x !== null);
+        const p = getPrefs();
+        const wanted = events.filter((e) =>
+          e.type === 'building.completed'
+            ? p.notifyBuild
+            : e.type === 'raid.spotted' || e.type === 'raid.resolved'
+              ? p.notifyRaid
+              : e.type === 'quest.completed' || e.type === 'quests.reset'
+                ? p.notifyQuest
+                : true,
+        );
+        const lines = wanted.map(describe).filter((x): x is string => x !== null);
         if (lines.length) setToast(lines.join(' · '));
       }),
     [setToast, store],
@@ -360,9 +353,14 @@ function Game({
   const go = (route: Route | null) => {
     if (!route) return setToast(t('noPlot'));
     setPlacing(null);
-    if (route.target === 'build') {
-      openPanel('build');
-      setPanel('build');
+    if (route.target === 'build' || route.target === 'builders' || route.target === 'quests') {
+      setSelected(null);
+      engineRef.current?.setSelected(null);
+      setReportId(null);
+      setPanel(route.target === 'build' ? 'build' : route.target === 'builders' ? 'builders' : 'quests');
+    } else if (route.target === 'barrow') {
+      engineRef.current?.focusOn('barrow');
+      select('barrow');
     } else {
       engineRef.current?.focusOn(route.target);
       select(route.target);
@@ -381,351 +379,350 @@ function Game({
   const power = totalPower(state);
 
   return (
-    <div className="app">
-      <div className="stage" ref={stageRef} data-testid="stage" />
+    <NeedContext.Provider value={(need) => go(routeForNeed(state, need, store.now()))}>
+      <div className="app">
+        <div className="stage" ref={stageRef} data-testid="stage" />
 
-      {/* ---- top bar: who you are, how strong, what you have ---- */}
-      <header className="topbar">
-        <button className="me" onClick={() => openPanel('profile')} data-testid="profile-button">
-          <span className="avatar">
-            <AvatarFace id={state.profile.avatar} size={44} />
-          </span>
-          <span className="me-text">
-            <strong className="me-name">{state.profile.name}</strong>
-            <span className="power" data-testid="power-chip">
-              <PowerIcon size={13} />
-              <span data-testid="power">{power.toLocaleString('en-US')}</span>
+        {/* ---- top bar: who you are, how strong, what you have ---- */}
+        <header className="topbar">
+          <button className="me" onClick={() => openPanel('profile')} data-testid="profile-button">
+            <span className="avatar">
+              <AvatarFace id={state.profile.avatar} size={44} />
             </span>
-          </span>
-        </button>
-        <div className="gold" title={resName('gold')}>
-          <GoldIcon size={16} />
-          <span data-testid="gold">{formatAmount(state.resources.gold)}</span>
-        </div>
-      </header>
-      <div className="resources" data-testid="resources">
-        {PRODUCED_RESOURCES.map((r) => {
-          const full = state.resources[r] >= caps[r];
-          return (
-            <div
-              className={`pill ${full ? 'full' : ''}`}
-              key={r}
-              title={`${resName(r)}: ${Math.floor(state.resources[r])} / ${caps[r]}`}
-            >
-              <ResourceIcon res={r} size={15} />
-              <span data-testid={`res-${r}`}>{formatAmount(state.resources[r])}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ---- left: round buttons ---- */}
-      <aside className="sidebar">
-        <button
-          className={`round ${busy < slots ? 'idle' : ''}`}
-          onClick={() => openPanel('builders')}
-          aria-label={t('builders')}
-          data-testid="builders"
-        >
-          <BuilderIcon />
-          <small>
-            {busy}/{slots}
-          </small>
-        </button>
-        <button
-          className="round"
-          onClick={() => openPanel('army')}
-          aria-label={t('warband')}
-          data-testid="army-button"
-        >
-          <ArmyIcon />
-          <small>{warriors}</small>
-          {sumCounts(state.army.wounded) > 0 && <span className="badge-dot warn">+</span>}
-        </button>
-        <button
-          className="round"
-          onClick={() => openPanel('reports')}
-          aria-label={t('sagas')}
-          data-testid="reports-button"
-        >
-          <SagaIcon />
-          {unread > 0 && <span className="badge-dot">{unread}</span>}
-        </button>
-        <button
-          className="round"
-          onClick={() => openPanel('quests')}
-          aria-label={t('quests')}
-          data-testid="quests-button"
-        >
-          <QuestIcon />
-          {claimable > 0 && <span className="badge-dot">{claimable}</span>}
-        </button>
-      </aside>
-
-      {/* ---- right: heroes as small round portraits ---- */}
-      <aside className="heroes">
-        {[0, 1, 2].map((i) => {
-          const h = HEROES.find((x) => x.id === state.heroes.squad[i]);
-          return (
-            <button
-              key={i}
-              className={`hero ${h ? '' : 'locked'}`}
-              onClick={() => openPanel('heroes')}
-              aria-label={h?.name ?? t('heroes')}
-              data-testid={`side-hero-${i}`}
-            >
-              {h ? <HeroPortrait look={h.look} rarity={h.rarity} size={38} /> : <HeroIcon size={20} />}
-            </button>
-          );
-        })}
-      </aside>
-
-      {((selected && selected !== 'longship') || panel === 'build') && !placing && (
-        <PlotPanel
-          store={store}
-          state={state}
-          plotId={panel === 'build' ? null : selected}
-          onClose={() => (panel === 'build' ? setPanel(null) : select(null))}
-          onError={onError}
-          onChoose={startPlacing}
-          onMove={startMoving}
-        />
-      )}
-      {placing && (
-        <div className="place-bar" data-testid="place-bar">
-          <p className={placeError ? 'bad' : ''}>
-            {bName(placing.type)} · {placeError ? errorText(placeError) : t('dragHint')}
-          </p>
-          <div className="place-buttons">
-            <button onClick={() => setPlacing(null)} aria-label={t('cancel')} data-testid="place-cancel">
-              ✕
-            </button>
-            <button
-              onClick={() => setPlacing({ ...placing, rot: placing.rot + Math.PI / 4 })}
-              aria-label={t('rotate')}
-              data-testid="place-rotate"
-            >
-              ⟳
-            </button>
-            <button
-              className="ok"
-              disabled={!!placeError}
-              onClick={confirmPlacing}
-              aria-label={t('place')}
-              data-testid="place-ok"
-            >
-              ✓
-            </button>
-          </div>
-        </div>
-      )}
-      {state.raid.incoming && !placing && (
-        <button
-          className="raid-banner"
-          data-testid="raid-banner"
-          onClick={() => {
-            const wall = Object.values(state.buildings).find(
-              (b) => b.type === 'palisade' || b.type === 'rampart',
-            );
-            if (wall) go({ target: wall.id, hint: 'call-raid' });
-            else openPanel('army');
-          }}
-        >
-          {t('raidWarn', { t: formatDuration(Math.max(0, state.raid.incoming.landsAt - store.now())) })}
-        </button>
-      )}
-      {selected === 'longship' && (
-        <section className="card panel" data-testid="info-card" role="dialog" aria-label={t('longship')}>
-          <button className="close" onClick={() => select(null)} aria-label={t('close')}>
-            ×
+            <span className="me-text">
+              <strong className="me-name">{state.profile.name}</strong>
+              <span className="power" data-testid="power-chip">
+                <PowerIcon size={13} />
+                <span data-testid="power">{power.toLocaleString('en-US')}</span>
+              </span>
+            </span>
           </button>
-          <h2>{t('longship')}</h2>
-          <p className="norse">Snekkja</p>
-          <p>{t('longshipDesc')}</p>
-        </section>
-      )}
-      {panel === 'army' && (
-        <ArmyPanel
-          state={state}
-          now={store.now()}
-          run={(cmd) => void run(cmd)}
-          onClose={() => setPanel(null)}
-          onBarrow={() => setPanel('barrow')}
-        />
-      )}
-      {panel === 'barrow' && (
-        <BarrowPanel
-          state={state}
-          store={store}
-          onClose={() => setPanel(null)}
-          onReport={openReport}
-          onError={onError}
-        />
-      )}
-      {panel === 'reports' && (
-        <ReportsPanel state={state} onOpen={openReport} onClose={() => setPanel(null)} />
-      )}
-      {panel === 'heroes' && (
-        <HeroesPanel store={store} state={state} onClose={() => setPanel(null)} onError={onError} />
-      )}
-      {panel === 'chat' && (
-        <ChatPanel
-          state={state}
-          onClose={() => setPanel(null)}
-          onOpenWorld={() => setPanel('world')}
-          onSignedIn={() => void online.resync()}
-          playerAlliance={
-            playerAlliance
-              ? {
-                  channelId: playerAlliance.channelId,
-                  label: `[${playerAlliance.tag}] ${playerAlliance.name}`,
-                }
-              : null
-          }
-        />
-      )}
-      {panel === 'world' && (
-        <WorldMap
-          store={store}
-          state={state}
-          onClose={() => setPanel(null)}
-          onError={onError}
-          onReport={(id) => {
-            setReportId(id);
-            store.dispatch({ type: 'readReport', reportId: id });
-          }}
-          online={online}
-          onSignIn={() => setPanel('chat')}
-        />
-      )}
-      {report && <ReportView report={report} onClose={() => setReportId(null)} />}
-      {panel === 'quests' && (
-        <QuestsPanel
-          store={store}
-          state={state}
-          tab={questTab}
-          setTab={setQuestTab}
-          onClose={() => setPanel(null)}
-          onError={onError}
-          onGoDaily={(id) => go(routeForDaily(state, id))}
-          onGoMain={() => main && go(routeForGoal(state, main.quest.goal))}
-        />
-      )}
-      {panel === 'builders' && (
-        <BuildersPanel
-          state={state}
-          now={store.now()}
-          slots={slots}
-          onClose={() => setPanel(null)}
-          onOpen={(plot) => go({ target: plot, hint: 'finish' })}
-          onGoBuild={() => go(main ? routeForGoal(state, main.quest.goal) : null)}
-        />
-      )}
-      {panel === 'profile' && (
-        <ProfilePanel
-          state={state}
-          run={run}
-          onClose={() => setPanel(null)}
-          toast={setToast}
-          onSettings={() => setPanel('settings')}
-        />
-      )}
-      {panel === 'settings' && (
-        <SettingsPanel
-          snow={snow}
-          setSnow={(on) => {
-            setSnow(on);
-            engineRef.current?.setSnow(on);
-            try {
-              localStorage.setItem(SNOW_KEY, on ? 'on' : 'off');
-            } catch {
-              // storage blocked: the choice lasts for this visit
-            }
-          }}
-          onRestart={() => {
-            void store.reset();
-            select(null);
-            setPanel(null);
-          }}
-          onClose={() => setPanel(null)}
-        />
-      )}
-
-      {toast && (
-        <div className="toast" role="status">
-          {toast}
+          <div className="gold" title={resName('gold')}>
+            <GoldIcon size={16} />
+            <span data-testid="gold">{formatAmount(state.resources.gold)}</span>
+          </div>
+        </header>
+        <div className="resources" data-testid="resources">
+          {PRODUCED_RESOURCES.map((r) => {
+            const full = state.resources[r] >= caps[r];
+            return (
+              <div
+                className={`pill ${full ? 'full' : ''}`}
+                key={r}
+                title={`${resName(r)}: ${Math.floor(state.resources[r])} / ${caps[r]}`}
+              >
+                <ResourceIcon res={r} size={15} />
+                <span data-testid={`res-${r}`}>{formatAmount(state.resources[r])}</span>
+              </div>
+            );
+          })}
         </div>
-      )}
 
-      {/* ---- the guide bar: always one clear next step ---- */}
-      {main && !selected && !panel && !report && !placing && (
-        <div className={`guide ${main.done ? 'ready' : ''}`} data-testid="guide">
+        {/* ---- left: round buttons ---- */}
+        <aside className="sidebar">
           <button
-            className="guide-text"
+            className={`round ${busy < slots ? 'idle' : ''}`}
+            onClick={() => openPanel('builders')}
+            aria-label={t('builders')}
+            data-testid="builders"
+          >
+            <BuilderIcon />
+            <small>
+              {busy}/{slots}
+            </small>
+          </button>
+          <button
+            className="round"
+            onClick={() => openPanel('army')}
+            aria-label={t('warband')}
+            data-testid="army-button"
+          >
+            <ArmyIcon />
+            <small>{warriors}</small>
+            {sumCounts(state.army.wounded) > 0 && <span className="badge-dot warn">+</span>}
+          </button>
+          <button
+            className="round"
+            onClick={() => openPanel('reports')}
+            aria-label={t('sagas')}
+            data-testid="reports-button"
+          >
+            <SagaIcon />
+            {unread > 0 && <span className="badge-dot">{unread}</span>}
+          </button>
+          <button
+            className="round"
+            onClick={() => openPanel('quests')}
+            aria-label={t('quests')}
+            data-testid="quests-button"
+          >
+            <QuestIcon />
+            {claimable > 0 && <span className="badge-dot">{claimable}</span>}
+          </button>
+        </aside>
+
+        {/* ---- right: heroes as small round portraits ---- */}
+        <aside className="heroes">
+          {[0, 1, 2].map((i) => {
+            const h = HEROES.find((x) => x.id === state.heroes.squad[i]);
+            return (
+              <button
+                key={i}
+                className={`hero ${h ? '' : 'locked'}`}
+                onClick={() => openPanel('heroes')}
+                aria-label={h?.name ?? t('heroes')}
+                data-testid={`side-hero-${i}`}
+              >
+                {h ? <HeroPortrait look={h.look} rarity={h.rarity} size={38} /> : <HeroIcon size={20} />}
+              </button>
+            );
+          })}
+        </aside>
+
+        {((selected && selected !== 'longship') || panel === 'build') && !placing && (
+          <PlotPanel
+            store={store}
+            state={state}
+            plotId={panel === 'build' ? null : selected}
+            onClose={() => (panel === 'build' ? setPanel(null) : select(null))}
+            onError={onError}
+            onChoose={startPlacing}
+            onMove={startMoving}
+          />
+        )}
+        {placing && (
+          <div className="place-bar" data-testid="place-bar">
+            <p className={placeError ? 'bad' : ''}>
+              {bName(placing.type)} · {placeError ? errorText(placeError) : t('dragHint')}
+            </p>
+            <div className="place-buttons">
+              <button onClick={() => setPlacing(null)} aria-label={t('cancel')} data-testid="place-cancel">
+                ✕
+              </button>
+              <button
+                onClick={() => setPlacing({ ...placing, rot: placing.rot + Math.PI / 4 })}
+                aria-label={t('rotate')}
+                data-testid="place-rotate"
+              >
+                ⟳
+              </button>
+              <button
+                className="ok"
+                disabled={!!placeError}
+                onClick={confirmPlacing}
+                aria-label={t('place')}
+                data-testid="place-ok"
+              >
+                ✓
+              </button>
+            </div>
+          </div>
+        )}
+        {state.raid.incoming && !placing && (
+          <button
+            className="raid-banner"
+            data-testid="raid-banner"
             onClick={() => {
-              setQuestTab('main');
-              openPanel('quests');
+              const wall = Object.values(state.buildings).find(
+                (b) => b.type === 'palisade' || b.type === 'rampart',
+              );
+              if (wall) go({ target: wall.id, hint: 'call-raid' });
+              else openPanel('army');
             }}
           >
-            <QuestIcon size={22} />
-            <span>{goalText(main.quest.goal)}</span>
-            <Reward reward={main.quest.reward} />
+            {t('raidWarn', { t: formatDuration(Math.max(0, state.raid.incoming.landsAt - store.now())) })}
           </button>
-          {main.done ? (
+        )}
+        {selected === 'longship' && (
+          <section className="card panel" data-testid="info-card" role="dialog" aria-label={t('longship')}>
+            <button className="close" onClick={() => select(null)} aria-label={t('close')}>
+              ×
+            </button>
+            <h2>{t('longship')}</h2>
+            <p className="norse">Snekkja</p>
+            <p>{t('longshipDesc')}</p>
+          </section>
+        )}
+        {panel === 'army' && (
+          <ArmyPanel
+            state={state}
+            now={store.now()}
+            run={(cmd) => void run(cmd)}
+            onClose={() => setPanel(null)}
+            onBarrow={() => setPanel('barrow')}
+          />
+        )}
+        {panel === 'barrow' && (
+          <BarrowPanel
+            state={state}
+            store={store}
+            onClose={() => setPanel(null)}
+            onReport={openReport}
+            onError={onError}
+          />
+        )}
+        {panel === 'reports' && (
+          <ReportsPanel state={state} onOpen={openReport} onClose={() => setPanel(null)} />
+        )}
+        {panel === 'heroes' && (
+          <HeroesPanel store={store} state={state} onClose={() => setPanel(null)} onError={onError} />
+        )}
+        {panel === 'chat' && (
+          <ChatPanel
+            state={state}
+            onClose={() => setPanel(null)}
+            onOpenWorld={() => setPanel('world')}
+            onSignedIn={() => void online.resync()}
+            playerAlliance={
+              playerAlliance
+                ? {
+                    channelId: playerAlliance.channelId,
+                    label: `[${playerAlliance.tag}] ${playerAlliance.name}`,
+                  }
+                : null
+            }
+          />
+        )}
+        {panel === 'world' && (
+          <WorldMap
+            store={store}
+            state={state}
+            onClose={() => setPanel(null)}
+            onError={onError}
+            onReport={(id) => {
+              setReportId(id);
+              store.dispatch({ type: 'readReport', reportId: id });
+            }}
+            online={online}
+            onSignIn={() => setPanel('chat')}
+          />
+        )}
+        {report && <ReportView report={report} onClose={() => setReportId(null)} />}
+        {panel === 'quests' && (
+          <QuestsPanel
+            store={store}
+            state={state}
+            tab={questTab}
+            setTab={setQuestTab}
+            onClose={() => setPanel(null)}
+            onError={onError}
+            onGoDaily={(id) => go(routeForDaily(state, id, store.now()))}
+            onGoMain={() => main && go(routeForGoal(state, main.quest.goal, store.now()))}
+          />
+        )}
+        {panel === 'builders' && (
+          <BuildersPanel
+            state={state}
+            now={store.now()}
+            slots={slots}
+            onClose={() => setPanel(null)}
+            onOpen={(plot) => go({ target: plot, hint: 'finish' })}
+            onGoBuild={() => go(main ? routeForGoal(state, main.quest.goal, store.now()) : null)}
+          />
+        )}
+        {(panel === 'profile' || panel === 'settings' || panel === 'bag') && (
+          <ProfilePage
+            store={store}
+            state={state}
+            tab={panel === 'bag' ? 'bag' : panel === 'settings' ? 'settings' : 'profile'}
+            setTab={(k) => setPanel(k)}
+            run={run}
+            toast={setToast}
+            online={{
+              on: online.on,
+              userId: online.userId,
+              allianceName: online.mine?.alliance
+                ? `[${online.mine.alliance.tag}] ${online.mine.alliance.name}`
+                : state.world.alliance !== null
+                  ? `[${ALLIANCES[state.world.alliance]!.tag}]`
+                  : null,
+            }}
+            onClose={() => setPanel(null)}
+            onSignIn={() => setPanel('chat')}
+            onRestart={() => {
+              void store.reset();
+              select(null);
+              setPanel(null);
+            }}
+          />
+        )}
+
+        {toast && (
+          <div className="toast" role="status">
+            {toast}
+          </div>
+        )}
+
+        {/* ---- the guide bar: always one clear next step ---- */}
+        {main && !selected && !panel && !report && !placing && (
+          <div className={`guide ${main.done ? 'ready' : ''}`} data-testid="guide">
             <button
-              className="guide-go claim"
-              data-testid="guide-claim"
+              className="guide-text"
               onClick={() => {
-                if (run({ type: 'claimMainQuest' })) setToast(t('gotReward'));
+                setQuestTab('main');
+                openPanel('quests');
               }}
             >
-              {t('claim')}
+              <QuestIcon size={22} />
+              <span>{goalText(main.quest.goal)}</span>
+              <Reward reward={main.quest.reward} />
             </button>
-          ) : (
-            <button
-              className="guide-go"
-              data-testid="guide-go"
-              aria-label={t('go')}
-              onClick={() => go(routeForGoal(state, main.quest.goal))}
-            >
-              ➜
-            </button>
-          )}
-        </div>
-      )}
+            {main.done ? (
+              <button
+                className="guide-go claim"
+                data-testid="guide-claim"
+                onClick={() => {
+                  if (run({ type: 'claimMainQuest' })) setToast(t('gotReward'));
+                }}
+              >
+                {t('claim')}
+              </button>
+            ) : (
+              <button
+                className="guide-go"
+                data-testid="guide-go"
+                aria-label={t('go')}
+                onClick={() => go(routeForGoal(state, main.quest.goal, store.now()))}
+              >
+                ➜
+              </button>
+            )}
+          </div>
+        )}
 
-      <nav className="bottombar">
-        <button onClick={() => openPanel('build')} aria-label={t('build')} data-testid="build-button">
-          <BuilderIcon size={26} />
-        </button>
-        <button onClick={() => openPanel('heroes')} aria-label={t('heroes')} data-testid="heroes-button">
-          <HeroIcon size={26} />
-        </button>
-        <button onClick={() => setToast(t('bagSoon'))} aria-label={t('bag')}>
-          <BagIcon size={26} />
-        </button>
-        <button
-          onClick={() => openPanel('settings')}
-          aria-label={t('settings')}
-          data-testid="settings-button"
-        >
-          <GearIcon size={24} />
-        </button>
-        <button onClick={() => openPanel('chat')} aria-label={t('chat')} data-testid="chat-button">
-          <span className="emoji-icon">💬</span>
-        </button>
-        <button
-          className="globe"
-          onClick={() => openPanel('world')}
-          aria-label={t('world')}
-          data-testid="globe"
-        >
-          <GlobeIcon size={40} />
-        </button>
-      </nav>
+        <nav className="bottombar">
+          <button onClick={() => openPanel('build')} aria-label={t('build')} data-testid="build-button">
+            <BuilderIcon size={26} />
+          </button>
+          <button onClick={() => openPanel('heroes')} aria-label={t('heroes')} data-testid="heroes-button">
+            <HeroIcon size={26} />
+          </button>
+          <button onClick={() => openPanel('bag')} aria-label={t('bag')} data-testid="bag-button">
+            <BagIcon size={26} />
+          </button>
+          <button
+            onClick={() => openPanel('settings')}
+            aria-label={t('settings')}
+            data-testid="settings-button"
+          >
+            <GearIcon size={24} />
+          </button>
+          <button onClick={() => openPanel('chat')} aria-label={t('chat')} data-testid="chat-button">
+            <span className="emoji-icon">💬</span>
+          </button>
+          <button
+            className="globe"
+            onClick={() => openPanel('world')}
+            aria-label={t('world')}
+            data-testid="globe"
+          >
+            <GlobeIcon size={40} />
+          </button>
+        </nav>
 
-      <Splash visible={!ready} />
-    </div>
+        <Splash visible={!ready} />
+      </div>
+    </NeedContext.Provider>
   );
 }
 
@@ -765,7 +762,12 @@ function BuildersPanel({
                 </div>
                 <span className="muted">⏱ {formatDuration(left)}</span>
               </div>
-              <button className="go" aria-label={t('go')} onClick={() => onOpen(job.buildingId)}>
+              <button
+                className="go"
+                aria-label={t('go')}
+                data-hint="builder-go"
+                onClick={() => onOpen(job.buildingId)}
+              >
                 ➜
               </button>
             </li>
@@ -783,168 +785,6 @@ function BuildersPanel({
           </li>
         ))}
       </ul>
-    </section>
-  );
-}
-
-function ProfilePanel({
-  state,
-  run,
-  onClose,
-  toast,
-  onSettings,
-}: {
-  state: GameState;
-  run: (cmd: Parameters<GameStore['dispatch']>[0]) => boolean;
-  onClose: () => void;
-  toast: (m: string) => void;
-  onSettings: () => void;
-}) {
-  const [name, setName] = useState(state.profile.name);
-  const power = totalPower(state);
-  const army = troopPower(state);
-  const realm = homeRealm();
-  return (
-    <section className="card panel" data-testid="profile" role="dialog" aria-label={t('profile')}>
-      <button className="close" onClick={onClose} aria-label={t('close')}>
-        ×
-      </button>
-      <div className="profile-head">
-        <AvatarFace id={state.profile.avatar} size={72} />
-        <form
-          className="name-row"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (run({ type: 'setName', name })) toast(t('renamed'));
-          }}
-        >
-          <input
-            value={name}
-            maxLength={16}
-            onChange={(e) => setName(e.target.value)}
-            aria-label={t('name')}
-            data-testid="name-input"
-          />
-          <button className="primary small" type="submit" data-testid="name-save">
-            ✓
-          </button>
-        </form>
-      </div>
-      <dl className="profile-stats">
-        <div>
-          <dt>⚔ {t('power')}</dt>
-          <dd data-testid="profile-power">{power.toLocaleString('en-US')}</dd>
-        </div>
-        <div>
-          <dt>🏠 {t('buildPower')}</dt>
-          <dd>{formatAmount(power - army - heroPower(state))}</dd>
-        </div>
-        <div>
-          <dt>🛡 {t('armyPower')}</dt>
-          <dd>{formatAmount(army)}</dd>
-        </div>
-        <div>
-          <dt>✦ {t('heroPower')}</dt>
-          <dd>{formatAmount(heroPower(state))}</dd>
-        </div>
-        <div>
-          <dt>🌍 {t('server')}</dt>
-          <dd data-testid="profile-server">
-            #{realm.id} {realm.name}
-          </dd>
-        </div>
-        <div>
-          <dt>👑 {t('king')}</dt>
-          <dd data-testid="profile-king">{realm.king}</dd>
-        </div>
-      </dl>
-      <button className="secondary" onClick={onSettings} data-testid="open-settings">
-        <GearIcon size={18} /> {t('settings')}
-      </button>
-      <h3>{t('pictures')}</h3>
-      <div className="avatar-grid">
-        {AVATARS.map((a) => {
-          const owned = state.profile.owned.includes(a.id);
-          const current = state.profile.avatar === a.id;
-          return (
-            <button
-              key={a.id}
-              className={`avatar-pick ${current ? 'active' : ''} ${owned ? '' : 'locked'}`}
-              data-testid={`avatar-${a.id}`}
-              onClick={() =>
-                owned ? run({ type: 'setAvatar', avatar: a.id }) : run({ type: 'buyAvatar', avatar: a.id })
-              }
-            >
-              <AvatarFace id={a.id} size={56} />
-              <small>
-                {owned ? (
-                  current ? (
-                    '✓'
-                  ) : (
-                    t('free')
-                  )
-                ) : (
-                  <>
-                    <GoldIcon size={12} /> {a.cost}
-                  </>
-                )}
-              </small>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function SettingsPanel({
-  snow,
-  setSnow,
-  onRestart,
-  onClose,
-}: {
-  snow: boolean;
-  setSnow: (on: boolean) => void;
-  onRestart: () => void;
-  onClose: () => void;
-}) {
-  const lang = useLang();
-  const [sure, setSure] = useState(false);
-  return (
-    <section className="card panel" data-testid="settings" role="dialog" aria-label={t('settings')}>
-      <button className="close" onClick={onClose} aria-label={t('close')}>
-        ×
-      </button>
-      <h2>{t('settings')}</h2>
-      <h3>{t('language')}</h3>
-      <div className="segmented">
-        {LANGS.map((l) => (
-          <button
-            key={l}
-            className={l === lang ? 'active' : ''}
-            onClick={() => setLang(l)}
-            data-testid={`lang-${l}`}
-          >
-            {l === 'ar' ? 'العربية' : l === 'fr' ? 'Français' : 'English'}
-          </button>
-        ))}
-      </div>
-      <h3>❄ {t('snow')}</h3>
-      <div className="segmented">
-        <button className={snow ? 'active' : ''} onClick={() => setSnow(true)} data-testid="snow-on">
-          {t('on')}
-        </button>
-        <button className={snow ? '' : 'active'} onClick={() => setSnow(false)} data-testid="snow-off">
-          {t('off')}
-        </button>
-      </div>
-      <button
-        className={`danger ${sure ? 'armed' : ''}`}
-        onClick={() => (sure ? onRestart() : setSure(true))}
-        data-testid="restart"
-      >
-        {sure ? t('restartSure') : t('restart')}
-      </button>
     </section>
   );
 }

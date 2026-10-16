@@ -3,6 +3,7 @@ import { ECONOMY } from './data/economy';
 import { HALL_PLOT_ID, PLOTS } from './data/plots';
 import { realmMap } from './systems/world';
 import { freshHeroes } from './systems/heroes';
+import { STARTING_ITEMS } from './data/items';
 import type { Cost, Resources } from './data/resources';
 import type { UnitType } from './data/troops';
 
@@ -156,9 +157,13 @@ export interface GameState {
     horns: number;
     pity: { epic: number; legendary: number };
   };
+  /** The Bag: item id → how many. */
+  items: Record<string, number>;
+  /** Deeds for the profile (owner request: how many you have slain, battles won...). */
+  stats: { kills: number; battlesWon: number; battlesLost: number; raidsBeaten: number; landTaken: number };
 }
 
-export const STATE_VERSION = 6;
+export const STATE_VERSION = 7;
 
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
@@ -182,6 +187,15 @@ export function newGame(seed: number, now: number): GameState {
     ...freshRaids(),
     ...freshWorld(),
     heroes: freshHeroes(),
+    ...freshBag(),
+  };
+}
+
+/** Fields added in save version 7: the Bag and the profile's deeds. */
+export function freshBag(): Pick<GameState, 'items' | 'stats'> {
+  return {
+    items: { ...STARTING_ITEMS },
+    stats: { kills: 0, battlesWon: 0, battlesLost: 0, raidsBeaten: 0, landTaken: 0 },
   };
 }
 
