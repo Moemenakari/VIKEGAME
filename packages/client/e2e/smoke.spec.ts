@@ -252,6 +252,15 @@ test('the globe opens Midgard: realms, alliances, the King and the wars', async 
   await expect(page.getByTestId('members').locator('li').first()).toBeVisible();
   await page.screenshot({ path: 'test-results/members.png' });
   await page.getByLabel('Close').click();
+  // Friends and alliance-mates with power, speed and distance; the map drags like any map.
+  await page.getByTestId('friends-button').click();
+  await expect(page.getByTestId('friends').locator('li').first()).toContainText('tiles away');
+  await page.getByLabel('Close').click();
+  await page.mouse.move(200, 600);
+  await page.mouse.down();
+  await page.mouse.move(80, 500, { steps: 6 });
+  await page.mouse.up();
+  await page.getByTestId('compass').click();
   await page.getByTestId('vs-button').click();
   await expect(page.getByTestId('vs-match')).toContainText('VS');
   await expect(page.getByTestId('vs-players').locator('li')).toHaveCount(10);
@@ -272,6 +281,8 @@ test('the globe opens Midgard: realms, alliances, the King and the wars', async 
   await page.getByTestId('find-button').click();
   await page.getByTestId('find-jarl').click();
   await expect(page.getByTestId('rally')).toBeVisible();
+  // Its card shows power split, kills, wins, speed and how far it is.
+  await expect(page.getByTestId('jarl-stats')).toContainText('tiles/min');
   await page.getByTestId('scout').click();
   await expect(page.getByTestId('scout-troops')).toBeVisible();
   await page.screenshot({ path: 'test-results/scout.png' });

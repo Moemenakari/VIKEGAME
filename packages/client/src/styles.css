@@ -2674,3 +2674,21 @@ body,
 .wlabel.shield {
   box-shadow: 0 0 0 1px rgba(140, 200, 255, 0.9);
 }
+
+.jarl-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+
+.jarl-stats b {
+  color: var(--gold-hi);
+}
+
+.compass {
+  display: inline-block;
+  color: #ff6b5a;
+  transition: transform 0.05s linear;
+}

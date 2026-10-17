@@ -121,6 +121,12 @@ export class WorldScene {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly target = new THREE.Vector2(200, 200);
   private distance = 160;
+  /** Turn of the map (two-finger twist), 0 = north up. */
+  private yaw = 0;
+  /** Glide after a flick (world units per second), like any map app. */
+  private readonly velocity = new THREE.Vector2();
+  private lastMove = 0;
+  private compass: HTMLElement | null = null;
   private size = 41;
   private raf = 0;
   private last = 0;
@@ -508,6 +514,7 @@ export class WorldScene {
   }
 
   focus(x: number, y: number, distance?: number): void {
+    this.velocity.set(0, 0);
     this.target.set((x + 0.5) * U, (y + 0.5) * U);
     if (distance) this.distance = distance;
     this.clamp();
@@ -570,12 +577,24 @@ export class WorldScene {
     // Tilted more when close (to see the halls), straight down when the realm is in view.
     const far = THREE.MathUtils.clamp(this.distance / this.maxDistance(), 0, 1);
     const pitch = THREE.MathUtils.lerp(0.78, 1.45, Math.sqrt(far));
+    const h = Math.cos(pitch) * this.distance;
     this.camera.position.set(
-      this.target.x,
+      this.target.x + Math.sin(this.yaw) * h,
       Math.sin(pitch) * this.distance,
-      this.target.y + Math.cos(pitch) * this.distance,
+      this.target.y + Math.cos(this.yaw) * h,
     );
     this.camera.lookAt(this.target.x, 0, this.target.y);
+    this.camera.updateMatrixWorld();
+    if (this.compass) this.compass.style.transform = `rotate(${this.yaw}rad)`;
+  }
+
+  /** The compass needle turns with the map; tapping it turns the map back to north. */
+  setCompass(el: HTMLElement | null): void {
+    this.compass = el;
+  }
+
+  resetNorth(): void {
+    this.yaw = 0;
   }
 
   private groundAt(cx: number, cy: number): THREE.Vector3 | null {
@@ -590,6 +609,8 @@ export class WorldScene {
   }
 
   private onDown = (e: PointerEvent) => {
+    this.velocity.set(0, 0);
+    this.lastMove = performance.now();
     this.renderer.domElement.setPointerCapture(e.pointerId);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     this.press = this.pointers.size === 1 ? { x: e.clientX, y: e.clientY, moved: false } : null;
@@ -601,14 +622,23 @@ export class WorldScene {
     if (this.press && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 8)
       this.press.moved = true;
     if (this.pointers.size === 1) {
+      // Drag: the ground under your finger follows it (any direction, like a map app).
+      this.updateCamera();
       const a = this.groundAt(prev.x, prev.y);
       const b = this.groundAt(e.clientX, e.clientY);
       if (a && b) {
-        this.target.x -= b.x - a.x;
-        this.target.y -= b.z - a.z;
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        this.target.x -= dx;
+        this.target.y -= dz;
         this.clamp();
+        const now = performance.now();
+        const dt = Math.max(1, now - this.lastMove) / 1000;
+        this.velocity.set(-dx / dt, -dz / dt).clampLength(0, 900);
+        this.lastMove = now;
       }
     } else if (this.pointers.size === 2) {
+      // Pinch to zoom, twist to turn the map.
       const other = [...this.pointers.entries()].find(([id]) => id !== e.pointerId)![1];
       const before = Math.hypot(prev.x - other.x, prev.y - other.y);
       const after = Math.hypot(e.clientX - other.x, e.clientY - other.y);
@@ -616,6 +646,13 @@ export class WorldScene {
         this.distance *= before / after;
         this.clamp();
       }
+      const a0 = Math.atan2(prev.y - other.y, prev.x - other.x);
+      const a1 = Math.atan2(e.clientY - other.y, e.clientX - other.x);
+      let d = a1 - a0;
+      if (d > Math.PI) d -= Math.PI * 2;
+      if (d < -Math.PI) d += Math.PI * 2;
+      this.yaw -= d;
+      this.velocity.set(0, 0);
     }
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   };
@@ -624,7 +661,10 @@ export class WorldScene {
     const p = this.press;
     this.pointers.delete(e.pointerId);
     this.press = null;
+    // A slow release does not glide.
+    if (performance.now() - this.lastMove > 80) this.velocity.set(0, 0);
     if (!p || p.moved) return;
+    this.velocity.set(0, 0);
     const hit = this.groundAt(e.clientX, e.clientY);
     if (hit) this.onTap(Math.floor(hit.x / U), Math.floor(hit.z / U));
   };
@@ -642,6 +682,12 @@ export class WorldScene {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     this.time += dt;
+    if (this.pointers.size === 0 && this.velocity.lengthSq() > 1) {
+      this.target.x += this.velocity.x * dt;
+      this.target.y += this.velocity.y * dt;
+      this.velocity.multiplyScalar(Math.exp(-dt * 4));
+      this.clamp();
+    }
     this.updateCamera();
     this.groundMesh?.update(this.time);
     this.sun.position.set(this.target.x - 120, 260, this.target.y - 80);

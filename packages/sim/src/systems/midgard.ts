@@ -256,9 +256,50 @@ export function marchLimit(state: GameState): number {
   return MIDGARD.marchesBase + Math.floor(hallLevel(state) / MIDGARD.marchesPerHall);
 }
 
-export function travelMs(state: GameState, x: number, y: number): number {
+export function travelMs(state: GameState, x: number, y: number, troops?: Record<string, number>): number {
   const d = Math.hypot(x - state.world.home.x, y - state.world.home.y);
-  return Math.max(MIDGARD.minTravelMs, Math.round(d * MIDGARD.travelMsPerTile));
+  return Math.max(MIDGARD.minTravelMs, Math.round(d * msPerTile(troops)));
+}
+
+/** A column moves at the pace of its slowest troop type (riders fastest, siege engines slowest). */
+export function msPerTile(troops?: Record<string, number>): number {
+  let ms = 0;
+  for (const [id, n] of Object.entries(troops ?? {}))
+    if (n > 0) ms = Math.max(ms, MIDGARD.msPerTileByType[TROOPS[id]?.type ?? ''] ?? MIDGARD.travelMsPerTile);
+  return ms || MIDGARD.travelMsPerTile;
+}
+
+/** March speed as tiles per minute (what the cards show). */
+export const tilesPerMinute = (troops?: Record<string, number>) =>
+  Math.round(600_000 / msPerTile(troops)) / 10;
+
+/** What a jarl's card shows: power split, deeds, march speed and heroes (deterministic). */
+export function jarlProfile(jarl: MapJarl) {
+  const defenders = jarlDefenders(jarl);
+  const troops: Record<string, number> = {};
+  let wall = 0;
+  for (const d of defenders) {
+    if (d.type === 'wall') wall = d.hp;
+    else troops[d.key] = d.count;
+  }
+  // The same split the jarl's power is made of: warriors, then heroes, the rest is buildings.
+  const troopPower = Math.round(jarlStrengthOf(jarl.level) * 9);
+  const heroes = jarlHeroes(jarl);
+  const heroPower = heroes.reduce((n, h) => n + h.level * 40, 0);
+  const buildingPower = Math.max(0, jarl.power - troopPower - heroPower);
+  const rng = createRng(hashString(`deeds-${jarl.id}-${jarl.name}`));
+  return {
+    troops,
+    troopCount: Object.values(troops).reduce((a, b) => a + b, 0),
+    wall,
+    troopPower,
+    heroPower,
+    buildingPower,
+    heroes,
+    kills: Math.round(jarl.power * (0.4 + nextInt(rng, 0, 100) / 80)),
+    battlesWon: jarl.level * 6 + nextInt(rng, 0, 40),
+    speed: tilesPerMinute(troops),
+  };
 }
 
 /** How much a node gives this band, and how long the gathering takes. */
@@ -321,7 +362,7 @@ export function startMarch(
   const sent = takeTroops(state, troops);
   if (typeof sent === 'string') return sent;
   state.wallet.stamina -= stamina;
-  const travel = travelMs(state, target.x, target.y);
+  const travel = travelMs(state, target.x, target.y, sent);
   // A rally waits for the alliance to gather before it sets out.
   const start = now + (rally ? WARFARE.rallyWaitMs : 0);
   let doneAt = start + travel;

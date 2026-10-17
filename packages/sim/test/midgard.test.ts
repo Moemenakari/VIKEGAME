@@ -11,6 +11,8 @@ import {
   deserialize,
   gatherPlan,
   midgard,
+  msPerTile,
+  jarlProfile,
   forts,
   nearest,
   newGame,
@@ -223,5 +225,22 @@ describe('ring forts', () => {
     const r = advance(s, m.arriveAt + 1).state;
     expect(r.reports[0]!.won).toBe(true);
     expect(r.world.cleared[fort.id]).toBeGreaterThan(m.arriveAt);
+  });
+});
+
+describe('march speed and jarl profiles', () => {
+  it('a column moves at the pace of its slowest troop: riders fastest, siege engines slowest', () => {
+    expect(msPerTile({ 'cavalry-1': 10 })).toBeLessThan(msPerTile({ 'shieldwall-1': 10 }));
+    expect(msPerTile({ 'cavalry-1': 10, 'siege-1': 1 })).toBe(msPerTile({ 'siege-1': 1 }));
+    expect(msPerTile({ 'siege-1': 1 })).toBeGreaterThan(msPerTile({ 'shieldwall-1': 10 }));
+  });
+
+  it("a jarl's profile splits its power and shows deeds, speed and heroes", () => {
+    const j = midgard(1).jarls[3]!;
+    const p = jarlProfile(j);
+    expect(p.troopPower + p.heroPower + p.buildingPower).toBe(Math.max(j.power, p.troopPower + p.heroPower));
+    expect(p.heroes).toHaveLength(3);
+    expect(p.speed).toBeGreaterThan(0);
+    expect(jarlProfile(j)).toEqual(p);
   });
 });

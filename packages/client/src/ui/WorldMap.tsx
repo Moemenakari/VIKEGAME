@@ -26,6 +26,9 @@ import {
   tileLimit,
   tileOwner,
   travelMs,
+  tilesPerMinute,
+  jarlProfile,
+  HEROES,
   vsResult,
   vsStandings,
   warZone,
@@ -135,7 +138,7 @@ export function WorldMap({
     return { x: (state.world.home.x + 0.5 + c) / 2, y: (state.world.home.y + 0.5 + c) / 2, scale: 18 };
   });
   const [picked, setPicked] = useState<Picked | null>(null);
-  const [sheet, setSheet] = useState<'alliances' | 'events' | 'vs' | 'find' | null>(null);
+  const [sheet, setSheet] = useState<'alliances' | 'events' | 'vs' | 'find' | 'friends' | null>(null);
   const [layers, setLayers] = useState<Record<Layer, boolean>>({
     castles: true,
     wilds: true,
@@ -471,6 +474,7 @@ export function WorldMap({
   // ---- the 3D map (owner request: real halls, marching warriors, riders, carts, ships) ----
   const stageRef = useRef<HTMLDivElement>(null);
   const scene3d = useRef<WorldScene | null>(null);
+  const compassRef = useRef<HTMLSpanElement>(null);
   const pickRef = useRef(pick);
   pickRef.current = pick;
   const liveRef = useRef({ state, realmId, traffic: [] as Traffic[] });
@@ -485,6 +489,7 @@ export function WorldMap({
       return;
     }
     scene3d.current = sc;
+    sc.setCompass(compassRef.current);
     const c = (realmMap(state.world.realm).size - 1) / 2;
     sc.focus(state.world.home.x * 0.8 + c * 0.2, state.world.home.y * 0.8 + c * 0.2, 210);
     sc.setMarches(() => marchViews(liveRef.current, store.now()));
@@ -686,6 +691,14 @@ export function WorldMap({
           >
             🗺 {t('zoomAll')}
           </button>
+          {!no3d && (
+            <button onClick={() => scene3d.current?.resetNorth()} aria-label="N" data-testid="compass">
+              <span className="compass" ref={compassRef}>
+                ▲
+              </span>{' '}
+              N
+            </button>
+          )}
         </div>
         <div className="world-wallet">
           <button onClick={() => onOpenShop('energy')} data-testid="stamina">
@@ -725,6 +738,16 @@ export function WorldMap({
             data-testid="find-button"
           >
             🔍
+          </button>
+        )}
+        {mine && (
+          <button
+            className="round"
+            onClick={() => setSheet(sheet === 'friends' ? null : 'friends')}
+            aria-label={t('friendsMap')}
+            data-testid="friends-button"
+          >
+            👥
           </button>
         )}
         <button
@@ -986,6 +1009,79 @@ export function WorldMap({
         </div>
       )}
 
+      {sheet === 'friends' && (
+        <div className="card panel world-sheet" data-testid="friends">
+          <button className="close" onClick={() => setSheet(null)} aria-label={t('close')}>
+            ×
+          </button>
+          <h2>👥 {t('friendsMap')}</h2>
+          {state.world.alliance === null && others.length === 0 && <p className="muted">{t('vsJoin')}</p>}
+          <ul className="alliance-list">
+            {[
+              ...others
+                .filter(
+                  (p) =>
+                    (p.alliance && p.alliance.id === myPlayerAlliance) ||
+                    (!p.alliance && p.aiAlliance !== null && p.aiAlliance === state.world.alliance),
+                )
+                .map((p) => ({
+                  key: p.id,
+                  name: p.name,
+                  avatar: p.avatar,
+                  level: p.hall,
+                  power: p.power,
+                  speed: null as number | null,
+                  x: p.x,
+                  y: p.y,
+                  real: true,
+                })),
+              ...(state.world.alliance === null
+                ? []
+                : world.jarls
+                    .filter((j) => j.alliance === state.world.alliance)
+                    .map((j) => ({
+                      key: j.id,
+                      name: j.name,
+                      avatar: j.avatar,
+                      level: j.level,
+                      power: j.power,
+                      speed: jarlProfile(j).speed as number | null,
+                      x: j.x,
+                      y: j.y,
+                      real: false,
+                    }))),
+            ]
+              .map((f) => ({ ...f, d: Math.hypot(f.x - state.world.home.x, f.y - state.world.home.y) }))
+              .sort((a, b) => a.d - b.d)
+              .map((f) => (
+                <li key={f.key}>
+                  <AvatarFace id={f.avatar} size={30} />
+                  <span className="quest-body">
+                    <strong>
+                      {f.name} {f.real && <span className="tag-ally">🌐</span>}
+                    </strong>
+                    <span className="muted">
+                      {t('jarlLevel', { n: f.level })} · ⚔ {formatAmount(f.power)}
+                      {f.speed !== null && ` · ⚡ ${t('speedTiles', { n: f.speed })}`} · 📏{' '}
+                      {t('tilesAway', { n: Math.round(f.d) })}
+                    </span>
+                  </span>
+                  <button
+                    className="secondary small"
+                    aria-label="📍"
+                    onClick={() => {
+                      centre(f.x, f.y, 26);
+                      pick(f.x, f.y);
+                    }}
+                  >
+                    📍
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+
       {sheet === 'vs' && (
         <VsSheet store={store} state={state} onClose={() => setSheet(null)} onError={onError} />
       )}
@@ -1234,10 +1330,11 @@ function MapTargetCard({
   const march = mine ? state.marches.find((m) => m.target === o.id) : undefined;
   const until = state.world.cleared[o.id] ?? 0;
   const gone = mine && until > now;
-  const travel = mine ? travelMs(state, o.x, o.y) : 0;
-  const marchInfo = (
-    <p className="muted">
-      {t('marchTime', { t: formatDuration(travel) })} ·{' '}
+  /** March time and speed for the chosen warriors (the slowest troop sets the pace). */
+  const marchInfo = (send: Record<string, number>) => (
+    <p className="muted" data-testid="march-info">
+      {t('marchTime', { t: formatDuration(travelMs(state, o.x, o.y, send)) })} · ⚡{' '}
+      {t('speedTiles', { n: tilesPerMinute(send) })} ·{' '}
       {t('columns', { a: state.marches.length, b: marchLimit(state) })}
     </p>
   );
@@ -1267,6 +1364,44 @@ function MapTargetCard({
           </p>
         </div>
       </div>
+    );
+    const prof = jarlProfile(j);
+    head = (
+      <>
+        {head}
+        <div className="jarl-stats" data-testid="jarl-stats">
+          <span>
+            🗡 {t('j_troops')} <b>{formatAmount(prof.troopPower)}</b>
+          </span>
+          <span>
+            🏠 {t('j_buildings')} <b>{formatAmount(prof.buildingPower)}</b>
+          </span>
+          <span>
+            ⭐ {t('j_heroes')} <b>{formatAmount(prof.heroPower)}</b>
+          </span>
+          <span>
+            💀 {t('j_kills')} <b>{formatAmount(prof.kills)}</b>
+          </span>
+          <span>
+            🏆 {t('j_wins')} <b>{formatAmount(prof.battlesWon)}</b>
+          </span>
+          <span>⚡ {t('speedTiles', { n: prof.speed })}</span>
+          <span>👥 {formatAmount(prof.troopCount)}</span>
+          {mine && (
+            <span>
+              📏{' '}
+              {t('tilesAway', {
+                n: Math.round(Math.hypot(j.x - state.world.home.x, j.y - state.world.home.y)),
+              })}
+            </span>
+          )}
+        </div>
+        <p className="muted">
+          {prof.heroes
+            .map((h) => `${HEROES.find((x) => x.id === h.id)?.name.split(',')[0]} ${h.level}`)
+            .join(' · ')}
+        </p>
+      </>
     );
     const scoutCost = WARFARE.scoutSilverPerLevel * j.level;
     const scout = mine && !ally && (
@@ -1315,12 +1450,12 @@ function MapTargetCard({
           allies={sending === 'rally' ? (rallyAllies(state) ?? {}) : undefined}
           action={sending === 'rally' ? `⚑ ${t('rally')}` : `⚔ ${t('march')}`}
           testId={sending === 'rally' ? 'march-rally' : 'march-jarl'}
-          info={() => (
+          info={(send) => (
             <>
               {sending === 'rally' && (
                 <p className="muted">{t('rallyHow', { n: slots, t: formatDuration(WARFARE.rallyWaitMs) })}</p>
               )}
-              {marchInfo}
+              {marchInfo(send)}
             </>
           )}
           onSend={(troops) =>
@@ -1372,12 +1507,12 @@ function MapTargetCard({
           theirs={armyStrength(defenders)}
           action={`⚔ ${t('march')}`}
           testId="march-hunt"
-          info={() => (
+          info={(send) => (
             <>
               <p className="muted">
                 ⚡ {t('staminaCost', { n: STAMINA.cost[cp.kind] ?? 10, h: state.wallet.stamina })}
               </p>
-              {marchInfo}
+              {marchInfo(send)}
             </>
           )}
           onSend={(troops) => dispatch({ type: 'hunt', campId: cp.id, troops })}
@@ -1418,11 +1553,11 @@ function MapTargetCard({
                 <p className="muted">
                   {t('gatherPlan', {
                     n: formatAmount(plan.amount),
-                    t: formatDuration(plan.ms + 2 * travel),
+                    t: formatDuration(plan.ms + 2 * travelMs(state, n.x, n.y, send)),
                   })}{' '}
                   · {t('carry')} {formatAmount(carryOf(send))}
                 </p>
-                {marchInfo}
+                {marchInfo(send)}
               </>
             );
           }}

@@ -201,8 +201,17 @@ export const MIDGARD = {
   jarlGrowth: 1.3,
   /** What a jarl keeps in the open per level (winners take PVP.lootShare of it). */
   jarlStores: { food: 2_600, timber: 2_600, iron: 320, silver: 160 } satisfies Cost,
-  /** Marching: time per tile from your hold, and never less than this. */
+  /** Marching: time per tile from your hold, and never less than this. A column moves at the pace of its slowest troop. */
   travelMsPerTile: 8_000,
+  msPerTileByType: {
+    cavalry: 5_000,
+    shieldwall: 8_000,
+    berserker: 7_500,
+    archer: 8_000,
+    bear: 7_000,
+    siege: 12_000,
+    ship: 8_000,
+  } as Record<string, number>,
   minTravelMs: 20_000,
   /** What one warrior carries, by tier. */
   carryPerTier: [0, 15, 25, 40] as readonly number[],
