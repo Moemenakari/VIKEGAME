@@ -7,7 +7,7 @@ import { ALLIANCES, createNoise2D, hashString, type RealmMap } from '@jarlheim/s
  * with soft fills and clear borders. The visible map just draws these two images, so
  * panning and zooming cost one drawImage each (one trip, not one per tile).
  */
-export const PX = 22;
+export const PX = 30;
 
 const KIND_RGB: Record<string, [number, number, number]> = {
   field: [205, 214, 190],

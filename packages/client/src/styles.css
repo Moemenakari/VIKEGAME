@@ -2617,3 +2617,60 @@ body,
     transform: scale(0.9);
   }
 }
+
+/* ---- the 3D world map ----------------------------------------------------------- */
+.world-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.world-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  display: block;
+}
+
+.world-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Name plates like the genre's: dark plate, name in the relation colour, level badge. */
+.wlabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 4px;
+  border-radius: 4px;
+  background: rgba(14, 18, 26, 0.72);
+  white-space: nowrap;
+  font: 700 10px var(--body);
+  will-change: transform;
+}
+
+.wlabel b {
+  font-weight: 700;
+}
+
+.wlabel i {
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #e8e2d0;
+  color: #2a2418;
+  font: 800 10px var(--body);
+  font-style: normal;
+  text-align: center;
+}
+
+.wlabel.shield {
+  box-shadow: 0 0 0 1px rgba(140, 200, 255, 0.9);
+}

@@ -132,6 +132,9 @@ test('raise a Shield Yard, train warriors and clear the first draugr barrow', as
   await page.getByTestId('march-hunt').click();
   await expect(page.getByTestId('marches')).toBeVisible();
   expect((await state()).marches).toHaveLength(1);
+  // Close up on the hold: the column marches out across the 3D map.
+  await page.getByLabel('My hold').first().click();
+  await page.waitForTimeout(9000);
   await page.screenshot({ path: 'test-results/march.png' });
 
   expect(errors).toEqual([]);

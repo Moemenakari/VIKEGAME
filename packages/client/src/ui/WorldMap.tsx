@@ -53,6 +53,8 @@ import type { Online } from './useOnline';
 import type { RealmPlayer } from '../online/realm';
 import { AvatarFace, ResourceIcon, TroopTypeIcon } from './icons';
 import { paintBase, paintTerritory } from './worldArt';
+import { WorldScene, type HoldView, type MarchView } from '../scene/world/WorldScene';
+import { loadQuality } from '../scene/quality';
 
 /**
  * Midgard: the world map of your realm (server). Alliances and their land, the Law
@@ -173,7 +175,7 @@ export function WorldMap({
   const homeKey = tileKey(state.world.home.x, state.world.home.y);
   const playerAt = useMemo(() => new Map(others.map((p) => [tileKey(p.x, p.y), p])), [others]);
 
-  // Draw everything in one pass.
+  // 2D fallback (phones without WebGL): draw everything in one pass.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -455,8 +457,133 @@ export function WorldMap({
       else setPicked({ kind: 'node', node: thing as MapNode });
     } else setPicked(tile ? { kind: 'tile', tile } : null);
   };
-  const centre = (x: number, y: number, scale?: number) =>
+  const centre = (x: number, y: number, scale?: number) => {
+    scene3d.current?.focus(x, y, scale ? 3100 / scale : undefined);
     setView((v) => ({ x: x + 0.5, y: y + 0.5, scale: scale ?? Math.max(v.scale, 22) }));
+  };
+
+  // ---- the 3D map (owner request: real halls, marching warriors, riders, carts, ships) ----
+  const stageRef = useRef<HTMLDivElement>(null);
+  const scene3d = useRef<WorldScene | null>(null);
+  const [no3d, setNo3d] = useState(false);
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
+  const liveRef = useRef({ state, realmId, traffic: [] as Traffic[] });
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    let sc: WorldScene;
+    try {
+      sc = new WorldScene(stage, loadQuality(), (x, y) => pickRef.current(x, y));
+    } catch {
+      setNo3d(true);
+      return;
+    }
+    scene3d.current = sc;
+    const c = (realmMap(state.world.realm).size - 1) / 2;
+    sc.focus(state.world.home.x * 0.8 + c * 0.2, state.world.home.y * 0.8 + c * 0.2, 210);
+    sc.setMarches(() => marchViews(liveRef.current, store.now()));
+    return () => {
+      sc.dispose();
+      scene3d.current = null;
+    };
+  }, []);
+  const traffic = useMemo(() => realmTraffic(realmId), [realmId]);
+  liveRef.current = { state, realmId, traffic };
+  useEffect(() => {
+    scene3d.current?.setRealm(map, base, territory);
+  }, [map, base, territory, no3d]);
+  // Holds, camps and nodes for the 3D map (instances only change when this list does).
+  useEffect(() => {
+    const sc = scene3d.current;
+    if (!sc) return;
+    const holds: HoldView[] = [];
+    const c = (map.size - 1) / 2;
+    holds.push({
+      key: 'capital',
+      x: c,
+      y: c,
+      kind: 'capital',
+      color: ME,
+      label: `👑 ${map.realm.king}`,
+      level: 0,
+    });
+    for (const seat of map.seats)
+      holds.push({
+        key: `fort-${seat.alliance}`,
+        x: seat.x,
+        y: seat.y,
+        kind: 'fort',
+        color: relation(seat.alliance),
+        label: `🏰 [${ALLIANCES[seat.alliance]!.tag}]`,
+        level: 0,
+      });
+    for (const town of map.towns)
+      holds.push({
+        key: `town-${town.name}`,
+        x: town.x,
+        y: town.y,
+        kind: 'town',
+        color: '#ffffff',
+        label: town.name,
+        level: 0,
+      });
+    if (layers.castles) {
+      for (const j of world.jarls) {
+        if ((mine && tileKey(j.x, j.y) === homeKey) || playerAt.has(tileKey(j.x, j.y))) continue;
+        holds.push({
+          key: j.id,
+          x: j.x,
+          y: j.y,
+          kind: 'jarl',
+          color: jarlColor(j.alliance),
+          label: j.alliance === null ? j.name : `[${ALLIANCES[j.alliance]!.tag}] ${j.name}`,
+          level: j.level,
+          shield: mine && isCleared(state, j.id, now),
+        });
+      }
+      for (const p of others)
+        holds.push({
+          key: p.id,
+          x: p.x,
+          y: p.y,
+          kind: 'player',
+          color: playerColor(p),
+          label: `#${p.realm} ${p.alliance ? `[${p.alliance.tag}] ` : ''}${p.name}`,
+          level: p.hall,
+        });
+    }
+    if (mine)
+      holds.push({
+        key: 'me',
+        x: state.world.home.x,
+        y: state.world.home.y,
+        kind: 'me',
+        color: ME,
+        label: `★ ${state.profile.name}`,
+        level: hallLevel(state),
+      });
+    sc.setView({
+      holds,
+      camps: layers.wilds
+        ? world.camps.filter(
+            (cp) => !(mine && (isCleared(state, cp.id, now) || tileKey(cp.x, cp.y) === homeKey)),
+          )
+        : [],
+      nodes: layers.resourcesF ? world.nodes.filter((n) => !(mine && tileKey(n.x, n.y) === homeKey)) : [],
+      picked: picked
+        ? picked.kind === 'player'
+          ? picked.player
+          : picked.kind === 'jarl'
+            ? picked.jarl
+            : picked.kind === 'camp'
+              ? picked.camp
+              : picked.kind === 'node'
+                ? picked.node
+                : picked.tile
+        : null,
+    });
+  });
 
   /** Moves your hold (any teleport), behind the clouds, and shows where you landed. */
   const move = (cmd: Extract<Command, { type: 'teleport' }>, text: string) => {
@@ -468,7 +595,7 @@ export function WorldMap({
     setClouds(text);
     setTimeout(() => setClouds(null), 1400);
     setRealmId(w.realm);
-    setView((v) => ({ x: w.home.x + 0.5, y: w.home.y + 0.5, scale: Math.max(v.scale, 22) }));
+    centre(w.home.x, w.home.y);
   };
   const war = kingsWar(now, state.world.realm);
   const vsResultNow = mine ? vsResult(state) : null;
@@ -490,16 +617,21 @@ export function WorldMap({
       role="dialog"
       aria-label={t('world')}
     >
-      <canvas
-        ref={canvasRef}
-        className="world-canvas"
-        data-testid="world-canvas"
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerCancel={onUp}
-        onWheel={(e) => setView((v) => ({ ...v, scale: clampScale(v.scale * Math.exp(-e.deltaY * 0.0015)) }))}
-      />
+      <div className="world-stage" ref={stageRef} data-mode={no3d ? '2d' : '3d'} />
+      {no3d && (
+        <canvas
+          ref={canvasRef}
+          className="world-canvas"
+          data-testid="world-canvas"
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+          onWheel={(e) =>
+            setView((v) => ({ ...v, scale: clampScale(v.scale * Math.exp(-e.deltaY * 0.0015)) }))
+          }
+        />
+      )}
       <header className="world-top">
         <div className="realm-tabs" role="tablist">
           {REALMS.map((r) => (
@@ -531,7 +663,13 @@ export function WorldMap({
               {{ castles: '🏰', wilds: '🐺', resourcesF: '🌾' }[k]} {t(k)}
             </button>
           ))}
-          <button onClick={() => setView((v) => ({ ...v, scale: minScale() }))} data-testid="zoom-all">
+          <button
+            onClick={() => {
+              scene3d.current?.zoomAll();
+              setView((v) => ({ ...v, scale: minScale() }));
+            }}
+            data-testid="zoom-all"
+          >
             🗺 {t('zoomAll')}
           </button>
         </div>
@@ -1692,4 +1830,123 @@ function PlayerCard({
       )}
     </div>
   );
+}
+
+/** A column on the realm's roads (AI jarls going to hunt or gather), looping in time. */
+interface Traffic {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  period: number;
+  offset: number;
+  unit: MarchView['unit'];
+  alliance: number | null;
+}
+
+/** The realm's traffic: some jarls out hunting or gathering, and longships at sea (seeded). */
+function realmTraffic(realmId: number): Traffic[] {
+  const w = midgard(realmId);
+  const map = realmMap(realmId);
+  const out: Traffic[] = [];
+  w.jarls.forEach((j, i) => {
+    if (i % 4) return;
+    const goal = i % 8 ? nearest(w.nodes, j.x + 0.1, j.y + 0.1) : nearest(w.camps, j.x + 0.1, j.y + 0.1);
+    if (!goal) return;
+    out.push({
+      fromX: j.x,
+      fromY: j.y,
+      toX: goal.x,
+      toY: goal.y,
+      period: 90_000 + (i % 5) * 20_000,
+      offset: (i * 0.137) % 1,
+      unit: i % 8 ? 'cart' : i % 3 ? 'troops' : 'riders',
+      alliance: j.alliance,
+    });
+  });
+  // Longships on the sounds: two sea tiles with open water between them.
+  const sea = map.tiles.filter(
+    (t) => t.kind === 'sea' && t.x > 2 && t.y > 2 && t.x < map.size - 3 && t.y < map.size - 3,
+  );
+  for (
+    let k = 0;
+    k < sea.length && out.filter((o) => o.unit === 'troops' && o.period === 150_000).length < 6;
+    k += 37
+  ) {
+    const a = sea[k]!;
+    const b = sea.find(
+      (t) =>
+        Math.hypot(t.x - a.x, t.y - a.y) > 5 &&
+        Math.hypot(t.x - a.x, t.y - a.y) < 10 &&
+        [0.25, 0.5, 0.75].every(
+          (f) =>
+            tileAt(map, Math.round(a.x + (t.x - a.x) * f), Math.round(a.y + (t.y - a.y) * f))?.kind === 'sea',
+        ),
+    );
+    if (b)
+      out.push({
+        fromX: a.x,
+        fromY: a.y,
+        toX: b.x,
+        toY: b.y,
+        period: 150_000,
+        offset: (k * 0.31) % 1,
+        unit: 'troops',
+        alliance: null,
+      });
+  }
+  return out;
+}
+
+/** Where every column is right now: your marches, then the realm's traffic. */
+function marchViews(
+  live: { state: GameState; realmId: number; traffic: Traffic[] },
+  now: number,
+): MarchView[] {
+  const { state, realmId, traffic } = live;
+  const out: MarchView[] = [];
+  if (realmId === state.world.realm) {
+    for (const m of state.marches) {
+      const rallyEnds = m.allies ? m.startAt + WARFARE.rallyWaitMs : m.startAt;
+      const outStart = Math.max(m.startAt, rallyEnds);
+      const phase = now < m.arriveAt ? 'out' : now < m.doneAt ? 'there' : 'back';
+      const at =
+        phase === 'out'
+          ? Math.max(0, (now - outStart) / Math.max(1, m.arriveAt - outStart))
+          : phase === 'there'
+            ? 1
+            : 1 - (now - m.doneAt) / Math.max(1, m.returnAt - m.doneAt);
+      const riders = Object.keys(m.troops).some((id) => TROOPS[id]?.type === 'cavalry');
+      out.push({
+        id: `m${m.id}`,
+        fromX: state.world.home.x,
+        fromY: state.world.home.y,
+        toX: m.x,
+        toY: m.y,
+        at: Math.max(0, Math.min(1, at)),
+        phase,
+        unit: m.kind === 'gather' ? 'cart' : riders ? 'riders' : 'troops',
+        color: ME,
+        battle: m.kind !== 'gather' && now >= m.arriveAt && now < m.arriveAt + 5_000,
+      });
+    }
+  }
+  const myAlliance = state.world.alliance;
+  traffic.forEach((tr, i) => {
+    const f = (now / tr.period + tr.offset) % 1;
+    const outbound = f < 0.5;
+    out.push({
+      id: `t${i}`,
+      fromX: tr.fromX,
+      fromY: tr.fromY,
+      toX: tr.toX,
+      toY: tr.toY,
+      at: outbound ? f * 2 : 2 - f * 2,
+      phase: outbound ? 'out' : 'back',
+      unit: tr.unit,
+      color: tr.alliance !== null && tr.alliance === myAlliance ? ALLY : NEUTRAL,
+      battle: tr.unit === 'troops' && Math.abs(f - 0.5) < 0.03,
+    });
+  });
+  return out;
 }
