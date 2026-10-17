@@ -26,7 +26,8 @@ import {
 import { useState } from 'react';
 import type { GameStore } from '../game/store';
 import { formatAmount, formatDuration } from './format';
-import { t, troopName } from './i18n';
+import { t, troopName, useLang } from './i18n';
+import { reportTitle, sagaLine } from './sagaText';
 import { NeedLink } from './NeedLink';
 import { ResourceIcon, TroopTypeIcon } from './icons';
 import { HelpTip } from './help';
@@ -384,14 +385,17 @@ const TYPE_ORDER: UnitType[] = [
 ];
 
 export function ReportView({ report, onClose }: { report: BattleReport; onClose: () => void }) {
+  const lang = useLang();
   if (report.scout) return <ScoutView report={report} onClose={onClose} />;
+  if (report.kind === 'notice') return <NoticeView report={report} onClose={onClose} />;
+  const tt = reportTitle(report.title, lang);
   return (
     <section className="card panel report" data-testid="report" role="dialog" aria-label={report.title}>
       <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
-      <p className={`banner ${report.won ? 'won' : 'lost'}`}>{report.won ? t('victory') : t('defeat')}</p>
-      <h2>{report.title.split(' · ')[1]}</h2>
+      <p className={`banner ${report.won ? 'won' : 'lost'}`}>{tt.head}</p>
+      <h2>{tt.name}</h2>
       <p className="norse">
         {report.kind === 'raid'
           ? `⚔ ${t('raids')} #${report.level}`
@@ -399,7 +403,7 @@ export function ReportView({ report, onClose }: { report: BattleReport; onClose:
       </p>
       <div className="saga">
         {report.saga.map((line, i) => (
-          <p key={i}>{line}</p>
+          <p key={i}>{sagaLine(line, lang)}</p>
         ))}
       </div>
       {report.loot && Object.keys(report.loot).length > 0 && (
@@ -466,34 +470,109 @@ export function ReportView({ report, onClose }: { report: BattleReport; onClose:
   );
 }
 
+/** Which tab of the mail a report belongs to. */
+const MAIL_TAB = (r: BattleReport): 'battles' | 'scouts' | 'system' =>
+  r.kind === 'notice' ? 'system' : r.kind === 'scout' || r.kind === 'spied' ? 'scouts' : 'battles';
+
+const MAIL_ICON: Record<BattleReport['kind'], string> = {
+  draugr: '💀',
+  raid: '⛵',
+  conquest: '🚩',
+  pvp: '⚔️',
+  hunt: '🐺',
+  jarl: '🏰',
+  scout: '👁',
+  spied: '🕵️',
+  notice: '📜',
+};
+
+/** The mail (owner request): battles, scouts and notices in tabs, and "read all" in one tap. */
 export function ReportsPanel({
   state,
   onOpen,
+  onReadAll,
   onClose,
 }: {
   state: GameState;
   onOpen: (id: number) => void;
+  onReadAll: () => void;
   onClose: () => void;
 }) {
+  const lang = useLang();
+  const [tab, setTab] = useState<'all' | 'battles' | 'scouts' | 'system'>('all');
+  const shown = state.reports.filter((r) => tab === 'all' || MAIL_TAB(r) === tab);
+  const unread = (k: typeof tab) =>
+    state.reports.filter((r) => !r.read && (k === 'all' || MAIL_TAB(r) === k)).length;
   return (
-    <section className="card panel" data-testid="reports" role="dialog" aria-label={t('sagas')}>
+    <section className="card panel" data-testid="reports" role="dialog" aria-label={t('mail')}>
       <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
-      <h2>{t('sagas')}</h2>
+      <h2>📬 {t('mail')}</h2>
       <HelpTip id="sagas" state={state} />
-      {state.reports.length === 0 && <p className="muted">{t('noBattles')}</p>}
-      <ul className="report-list">
-        {state.reports.map((r) => (
-          <li key={r.id}>
-            <button className={`report-item ${r.read ? '' : 'unread'}`} onClick={() => onOpen(r.id)}>
-              <span className={r.won ? 'won' : 'lost'}>{r.won ? t('victory') : t('defeat')}</span>
-              <span>{r.title.split(' · ')[1]}</span>
-              <small>{t('level', { n: r.level })}</small>
-            </button>
-          </li>
+      <div className="tabs" role="tablist">
+        {(['all', 'battles', 'scouts', 'system'] as const).map((k) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={tab === k}
+            className={tab === k ? 'active' : ''}
+            onClick={() => setTab(k)}
+            data-testid={`mail-${k}`}
+          >
+            {t(`mail_${k}`)}
+            {unread(k) > 0 && <span className="badge-dot">{unread(k)}</span>}
+          </button>
         ))}
+      </div>
+      {unread('all') > 0 && (
+        <button className="secondary small" onClick={onReadAll} data-testid="read-all">
+          ✓ {t('readAll')}
+        </button>
+      )}
+      {shown.length === 0 && <p className="muted">{t('noMail')}</p>}
+      <ul className="report-list">
+        {shown.map((r) => {
+          const tt = reportTitle(r.title, lang);
+          return (
+            <li key={r.id}>
+              <button className={`report-item ${r.read ? '' : 'unread'}`} onClick={() => onOpen(r.id)}>
+                <span>{MAIL_ICON[r.kind]}</span>
+                <span className={r.kind === 'notice' || r.kind === 'scout' ? '' : r.won ? 'won' : 'lost'}>
+                  {tt.head}
+                </span>
+                <span>{tt.name}</span>
+                {r.level > 0 && <small>{t('level', { n: r.level })}</small>}
+              </button>
+            </li>
+          );
+        })}
       </ul>
+    </section>
+  );
+}
+
+/** A notice in the mail: what happened and what came with it. */
+function NoticeView({ report, onClose }: { report: BattleReport; onClose: () => void }) {
+  const lang = useLang();
+  const tt = reportTitle(report.title, lang);
+  return (
+    <section className="card panel report" data-testid="report" role="dialog" aria-label={tt.name}>
+      <button className="close" onClick={onClose} aria-label={t('close')}>
+        ×
+      </button>
+      <p className="banner won">📜 {tt.head}</p>
+      <h2>{tt.name}</h2>
+      <div className="saga">
+        {report.saga.map((line, i) => (
+          <p key={i}>{sagaLine(line, lang)}</p>
+        ))}
+      </div>
+      {Object.keys(report.reward).length > 0 && (
+        <p className="stat">
+          🎁 <CostLine cost={report.reward} />
+        </p>
+      )}
     </section>
   );
 }
@@ -501,19 +580,21 @@ export function ReportsPanel({
 /** What scouts saw in a hold: its warriors, wall, stores and heroes (owner request). */
 function ScoutView({ report, onClose }: { report: BattleReport; onClose: () => void }) {
   const sc = report.scout!;
+  const lang = useLang();
+  const tt = reportTitle(report.title, lang);
   return (
     <section className="card panel report" data-testid="report" role="dialog" aria-label={report.title}>
       <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
       <p className="banner won">👁 {t('scoutReport')}</p>
-      <h2>{report.title.split(' · ')[1]}</h2>
+      <h2>{tt.name}</h2>
       <p className="norse">
         {t('jarlLevel', { n: report.level })} · ⚔ {formatAmount(sc.power)}
       </p>
       <div className="saga">
         {report.saga.map((line, i) => (
-          <p key={i}>{line}</p>
+          <p key={i}>{sagaLine(line, lang)}</p>
         ))}
       </div>
       <h3>{t('garrison')}</h3>

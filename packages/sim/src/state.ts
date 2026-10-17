@@ -56,7 +56,7 @@ export interface ReportLine {
 export interface BattleReport {
   id: number;
   at: number;
-  kind: 'draugr' | 'raid' | 'conquest' | 'pvp' | 'hunt' | 'jarl' | 'scout' | 'spied';
+  kind: 'draugr' | 'raid' | 'conquest' | 'pvp' | 'hunt' | 'jarl' | 'scout' | 'spied' | 'notice';
   /** Barrow level, or the raid number. */
   level: number;
   title: string;

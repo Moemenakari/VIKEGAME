@@ -519,7 +519,7 @@ function Game({
           <button
             className="round"
             onClick={() => openPanel('reports')}
-            aria-label={t('sagas')}
+            aria-label={t('mail')}
             data-testid="reports-button"
           >
             <SagaIcon />
@@ -645,7 +645,12 @@ function Game({
           />
         )}
         {panel === 'reports' && (
-          <ReportsPanel state={state} onOpen={openReport} onClose={() => setPanel(null)} />
+          <ReportsPanel
+            state={state}
+            onOpen={openReport}
+            onReadAll={() => run({ type: 'readAllReports' })}
+            onClose={() => setPanel(null)}
+          />
         )}
         {panel === 'shop' && (
           <ShopPanel

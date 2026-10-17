@@ -100,3 +100,21 @@ describe('the endless main line', () => {
     expect(mainQuestAt(MAIN_QUESTS.length + ENDLESS_QUESTS.rotation.length - 1).goal.kind).toBe('troops');
   });
 });
+
+describe('the mail', () => {
+  it('joining an alliance and redeeming a gift send notices; one tap reads them all', () => {
+    const must = (st: GameState, cmd: Command) => {
+      const r = apply(st, cmd, T0);
+      if (!r.ok) throw new Error(r.error.message);
+      return r.state;
+    };
+    let s = must(newGame(1, T0), { type: 'joinAlliance', alliance: 2 });
+    expect(s.reports[0]!.kind).toBe('notice');
+    expect(s.reports[0]!.title).toMatch(/^Joined · /);
+    s = must(s, { type: 'redeemCode', code: 'skal-million' });
+    expect(s.reports[0]!.title).toBe('Gift · Gift code');
+    expect(s.reports.filter((q) => !q.read)).toHaveLength(2);
+    s = must(s, { type: 'readAllReports' });
+    expect(s.reports.every((q) => q.read)).toBe(true);
+  });
+});

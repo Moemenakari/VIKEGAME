@@ -32,6 +32,7 @@ export * from './data/items';
 export * from './systems/items';
 export * from './data/midgard';
 export * from './systems/midgard';
+export * from './systems/mail';
 export * from './data/vs';
 export * from './systems/vs';
 export * from './data/shops';

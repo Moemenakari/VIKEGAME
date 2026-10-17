@@ -13,6 +13,7 @@ import { bordersHold, realmMap, tileAt, tileGarrison, tileKey, tileLimit, tileOw
 import type { Cost } from './data/resources';
 import { DAILY_QUESTS } from './data/quests';
 import { AVATARS, DAILY_CHESTS, mainQuestAt } from './data/mainQuests';
+import { readAll, sendNotice } from './systems/mail';
 import { activityPoints, mainGoalDone } from './systems/goals';
 import { DRAUGR_BANDS, DRAUGR_UNITS } from './data/draugr';
 import { MILITARY, TRAINED_AT, TROOPS } from './data/troops';
@@ -125,6 +126,7 @@ export type Command =
   | { type: 'heal' }
   | { type: 'attackDraugr'; level: number; troops: Record<string, number> }
   | { type: 'readReport'; reportId: number }
+  | { type: 'readAllReports' }
   | { type: 'claimMainQuest' }
   | { type: 'claimQuestChest'; index: number }
   | { type: 'setName'; name: string }
@@ -369,9 +371,24 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     return null;
   },
 
-  joinAlliance(state, cmd) {
+  joinAlliance(state, cmd, now) {
     if (cmd.alliance !== null && !ALLIANCES[cmd.alliance]) return fail('UNKNOWN', 'No such alliance');
+    const before = state.world.alliance;
     state.world.alliance = cmd.alliance;
+    if (cmd.alliance !== null && cmd.alliance !== before)
+      sendNotice(state, now, `Joined · ${ALLIANCES[cmd.alliance]!.name}`, [
+        `You swore to stand with the ${ALLIANCES[cmd.alliance]!.name}.`,
+        'Your alliance is blue on the map. Hunt, gather and rally with them to earn alliance points.',
+      ]);
+    else if (cmd.alliance === null && before !== null)
+      sendNotice(state, now, `Left · ${ALLIANCES[before]!.name}`, [
+        `You left the ${ALLIANCES[before]!.name}. You stand alone now.`,
+      ]);
+    return null;
+  },
+
+  readAllReports(state) {
+    readAll(state);
     return null;
   },
 
@@ -588,7 +605,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     return err ? fail('NOT_READY', err) : null;
   },
 
-  redeemCode(state, cmd, _now, events) {
+  redeemCode(state, cmd, now, events) {
     const hash = hashString(cmd.code.trim().toUpperCase());
     const gift = GIFT_CODES.find((g) => g.hash === hash);
     if (!gift) return fail('UNKNOWN', 'That code does not exist');
@@ -599,13 +616,37 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     state.wallet.alliance += gift.wallet.alliance;
     state.wallet.medals += gift.wallet.medals;
     state.wallet.stamina += gift.wallet.stamina;
+    sendNotice(
+      state,
+      now,
+      'Gift · Gift code',
+      ['A gift code was redeemed. Everything is in your stores and your Bag.'],
+      gift.reward,
+      gift.items,
+    );
     events.push({ type: 'quest.claimed', questId: 'gift-code', reward: gift.reward });
     return null;
   },
 
-  claimVs(state, _cmd, _now, events) {
+  claimVs(state, _cmd, now, events) {
+    const before = events.length;
     const err = claimVs(state, events);
-    return err ? fail('NOT_READY', err) : null;
+    if (err) return fail('NOT_READY', err);
+    const e = events.slice(before).find((q) => q.type === 'vs.claimed');
+    if (e && e.type === 'vs.claimed')
+      sendNotice(
+        state,
+        now,
+        `VS reward · Season ${state.vs.claimed}`,
+        [
+          e.won
+            ? 'Your alliance won the VS season.'
+            : 'Your alliance lost the VS season, but every deed counted.',
+        ],
+        e.reward,
+        e.items,
+      );
+    return null;
   },
 
   setHome(state, cmd) {
