@@ -58,6 +58,8 @@ const migrations: Record<number, (state: Record<string, unknown>) => Record<stri
     ...state,
     world: { origin: null, ...((state.world ?? {}) as Record<string, unknown>) },
   }),
+  // v9 → v10: gift codes used.
+  9: (state) => ({ redeemed: [], ...state }),
 };
 
 export function serialize(state: GameState): string {
@@ -122,6 +124,7 @@ function isGameState(s: unknown): s is GameState {
     return false;
   if (!Array.isArray(s.marches) || !isNum(s.nextMarchId) || !isObj(s.vs) || !isNum(s.vs.points)) return false;
   if (!isObj(s.wallet) || !isNum(s.wallet.stamina) || !isObj(s.shop) || !isObj(s.shop.bought)) return false;
+  if (!Array.isArray(s.redeemed)) return false;
   const raid = s.raid;
   if (!isObj(raid) || !isNum(raid.count) || !(raid.nextAt === null || isNum(raid.nextAt))) return false;
   return (

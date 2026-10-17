@@ -78,7 +78,14 @@ export function ProfilePage({
       {tab === 'profile' && <ProfileTabView state={state} run={run} toast={toast} online={online} />}
       {tab === 'bag' && <BagView store={store} state={state} run={run} toast={toast} />}
       {tab === 'settings' && (
-        <SettingsView state={state} online={online} toast={toast} onSignIn={onSignIn} onRestart={onRestart} />
+        <SettingsView
+          state={state}
+          online={online}
+          toast={toast}
+          run={run}
+          onSignIn={onSignIn}
+          onRestart={onRestart}
+        />
       )}
     </section>
   );
@@ -376,16 +383,19 @@ function SettingsView({
   state,
   online,
   toast,
+  run,
   onSignIn,
   onRestart,
 }: {
   state: GameState;
   online: { on: boolean; userId: string | null };
   toast: (m: string) => void;
+  run: Run;
   onSignIn: () => void;
   onRestart: () => void;
 }) {
   const lang = useLang();
+  const [code, setCode] = useState('');
   const prefs = usePrefs();
   const [sureReset, setSureReset] = useState(false);
   const [sureDelete, setSureDelete] = useState(false);
@@ -421,6 +431,25 @@ function SettingsView({
           </button>
         )}
       </div>
+      <form
+        className="setting-row gift-code"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (run({ type: 'redeemCode', code })) setCode('');
+        }}
+      >
+        <span>🎟 {t('giftCode')}</span>
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="XXXX-XXXX"
+          maxLength={32}
+          data-testid="gift-code"
+        />
+        <button className="primary small" type="submit" disabled={!code.trim()} data-testid="gift-redeem">
+          {t('redeem')}
+        </button>
+      </form>
       <div className="setting-row">
         <span>ID {id}</span>
         <button className="secondary small" onClick={() => void copy(id, toast)}>

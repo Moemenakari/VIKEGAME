@@ -203,3 +203,15 @@ describe('VS: saving items for the right day', () => {
     expect(up.world.origin).toBeNull();
   });
 });
+
+describe('gift codes', () => {
+  it('the test code gives a million of everything, once per hold; a wrong code is refused', () => {
+    let s = newGame(1, T0);
+    expect(apply(s, { type: 'redeemCode', code: 'NOPE' }, T0).ok).toBe(false);
+    s = must(s, { type: 'redeemCode', code: ' skal-million ' }, T0);
+    expect(s.resources.gold).toBeGreaterThanOrEqual(1_000_000);
+    expect(s.resources.food).toBeGreaterThanOrEqual(1_000_000);
+    expect(s.items['speed-8h']).toBe(100);
+    expect(apply(s, { type: 'redeemCode', code: 'SKAL-MILLION' }, T0).ok).toBe(false);
+  });
+});

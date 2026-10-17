@@ -2692,3 +2692,10 @@ body,
   color: #ff6b5a;
   transition: transform 0.05s linear;
 }
+
+.gift-code input {
+  flex: 1;
+  min-width: 0;
+  margin: 0 8px;
+  text-transform: uppercase;
+}

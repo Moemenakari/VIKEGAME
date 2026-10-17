@@ -208,6 +208,8 @@ export interface GameState {
   wallet: { alliance: number; medals: number; stamina: number; staminaAt: number };
   /** What was bought from the shops today (daily limits). */
   shop: { day: number; bought: Record<string, number> };
+  /** Gift codes already used (their hashes). */
+  redeemed: number[];
   marches: March[];
   nextMarchId: number;
   vs: VsState;
@@ -224,7 +226,7 @@ export interface GameState {
   stats: { kills: number; battlesWon: number; battlesLost: number; raidsBeaten: number; landTaken: number };
 }
 
-export const STATE_VERSION = 9;
+export const STATE_VERSION = 10;
 
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
@@ -255,10 +257,11 @@ export function newGame(seed: number, now: number): GameState {
 }
 
 /** Fields added in save version 9: wallet (alliance points, VS medals, stamina) and shops. */
-export function freshWallet(now: number): Pick<GameState, 'wallet' | 'shop'> {
+export function freshWallet(now: number): Pick<GameState, 'wallet' | 'shop' | 'redeemed'> {
   return {
     wallet: { alliance: 0, medals: 0, stamina: STAMINA.max, staminaAt: now },
     shop: { day: dayIndex(now), bought: {} },
+    redeemed: [],
   };
 }
 

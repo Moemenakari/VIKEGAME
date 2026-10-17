@@ -37,3 +37,4 @@ export * from './systems/vs';
 export * from './data/shops';
 export * from './systems/shops';
 export * from './systems/teleport';
+export * from './data/codes';

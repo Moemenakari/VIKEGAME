@@ -221,6 +221,8 @@ const UI: Record<Lang, Dict> = {
     gather: 'Gather',
     spoils: 'Spoils',
     gatherPlan: 'Brings {n} · takes {t}',
+    giftCode: 'Gift code',
+    redeem: 'Redeem',
     speedTiles: '{n} tiles/min',
     tilesAway: '{n} tiles away',
     friendsMap: 'Friends & alliance',
@@ -635,6 +637,8 @@ const UI: Record<Lang, Dict> = {
     gather: 'اجمع',
     spoils: 'الغنائم',
     gatherPlan: 'تجلب {n} · تأخذ {t}',
+    giftCode: 'كود هدية',
+    redeem: 'استلم',
     speedTiles: '{n} مربع/دقيقة',
     tilesAway: 'على بعد {n} مربع',
     friendsMap: 'الرفقات والتحالف',
@@ -1052,6 +1056,8 @@ const UI: Record<Lang, Dict> = {
     gather: 'Récolter',
     spoils: 'Butin',
     gatherPlan: 'Rapporte {n} · durée {t}',
+    giftCode: 'Code cadeau',
+    redeem: 'Utiliser',
     speedTiles: '{n} cases/min',
     tilesAway: 'à {n} cases',
     friendsMap: 'Amis et alliance',
@@ -1770,6 +1776,10 @@ const ERRORS: Array<[RegExp, Record<Lang, string>]> = [
   [
     /^You cannot build that here$/,
     { en: 'You cannot build that here', ar: 'ما فيك تبني هون', fr: 'Impossible de construire ici' },
+  ],
+  [
+    /^That code does not exist$/,
+    { en: 'That code does not exist', ar: 'هالكود مش موجود', fr: 'Ce code n’existe pas' },
   ],
 ];
 
