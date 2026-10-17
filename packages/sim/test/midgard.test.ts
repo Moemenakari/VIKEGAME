@@ -11,6 +11,7 @@ import {
   deserialize,
   gatherPlan,
   midgard,
+  forts,
   nearest,
   newGame,
   serialize,
@@ -206,5 +207,21 @@ describe('Alliance VS', () => {
     const claimed = must(later, { type: 'claimVs' }, season.end + 2000);
     expect(claimed.vs.claimed).toBe(season.season);
     expect(apply(claimed, { type: 'claimVs' }, season.end + 3000).ok).toBe(false);
+  });
+});
+
+describe('ring forts', () => {
+  it('can be attacked by a strong enough army (never your own), and raise a shield when they fall', () => {
+    let s = newGame(1, T0);
+    const fort = forts(1).find((f) => f.alliance !== 0)!;
+    s = must(s, { type: 'joinAlliance', alliance: fort.alliance }, T0);
+    s.army.troops = { 'shieldwall-3': 3000, 'archer-3': 3000, 'berserker-3': 3000, 'siege-3': 300 };
+    expect(apply(s, { type: 'attackJarl', jarlId: fort.id, troops: { 'siege-3': 1 } }, T0).ok).toBe(false);
+    s = must(s, { type: 'joinAlliance', alliance: null }, T0);
+    s = must(s, { type: 'attackJarl', jarlId: fort.id, troops: { ...s.army.troops } }, T0);
+    const m = s.marches[0]!;
+    const r = advance(s, m.arriveAt + 1).state;
+    expect(r.reports[0]!.won).toBe(true);
+    expect(r.world.cleared[fort.id]).toBeGreaterThan(m.arriveAt);
   });
 });

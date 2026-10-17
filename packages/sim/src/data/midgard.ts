@@ -196,6 +196,8 @@ export const MIDGARD = {
   campGrowth: 1.42,
   /** Strength of a level-1 jarl's hold and its growth per level (levels 1–20). */
   jarlStrength: 240,
+  /** Ring forts fight like a jarl's hold of this level (the King's fort two higher). */
+  fortLevel: 14,
   jarlGrowth: 1.3,
   /** What a jarl keeps in the open per level (winners take PVP.lootShare of it). */
   jarlStores: { food: 2_600, timber: 2_600, iron: 320, silver: 160 } satisfies Cost,

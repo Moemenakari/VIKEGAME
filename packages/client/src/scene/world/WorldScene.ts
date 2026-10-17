@@ -2,7 +2,8 @@ import { createRng, hashString, nextRange, tileAt, type BuildingType, type Realm
 import * as THREE from 'three';
 import { createBarrow, createBuildingModel } from '../hold/buildingModels';
 import { createForest, createRocks } from '../hold/props';
-import { addGroundDetail, createBushes, fieldModel } from './worldModels';
+import { createBushes, fieldModel } from './worldModels';
+import { createGround, type Ground } from './ground';
 import { createLongship } from '../hold/longship';
 import type { QualitySettings } from '../quality';
 import {
@@ -10,6 +11,9 @@ import {
   cartModel,
   chestModel,
   horseModel,
+  oxModel,
+  ramModel,
+  sheepModel,
   soldierModel,
   tentModel,
   wolfModel,
@@ -51,7 +55,7 @@ export interface MarchView {
   at: number;
   /** Marching (or fighting) or carrying goods home. */
   phase: 'out' | 'there' | 'back';
-  unit: 'troops' | 'riders' | 'cart';
+  unit: 'troops' | 'riders' | 'cart' | 'siege';
   color: string;
   /** Fighting at the target (smoke and fire). */
   battle: boolean;
@@ -122,6 +126,7 @@ export class WorldScene {
   private last = 0;
   private time = 0;
   private sun!: THREE.DirectionalLight;
+  private groundMesh: Ground | null = null;
   private readonly statics = new THREE.Group();
   private readonly dynamics = new THREE.Group();
   private readonly holdMeshes = new Map<string, THREE.InstancedMesh>();
@@ -129,7 +134,7 @@ export class WorldScene {
   private rings!: THREE.InstancedMesh;
   private holdKey = '';
   private holds: HoldView[] = [];
-  private units: Record<'soldier' | 'horse' | 'cart' | 'flag', Pool>;
+  private units: Record<'soldier' | 'horse' | 'cart' | 'ram' | 'ox' | 'sheep' | 'flag', Pool>;
   private ships: Array<ReturnType<typeof createLongship>> = [];
   private smoke: THREE.Mesh[] = [];
   private pickRing: THREE.Mesh;
@@ -220,6 +225,9 @@ export class WorldScene {
       soldier: tint(soldierModel(), 260, 'soldiers'),
       horse: tint(horseModel(), 90, 'horses'),
       cart: tint(cartModel(), 40, 'carts'),
+      ram: tint(ramModel(), 40, 'rams'),
+      ox: tint(oxModel(), 260, 'oxen'),
+      sheep: tint(sheepModel(), 360, 'sheep'),
       flag: (() => {
         const m = new THREE.InstancedMesh(
           new THREE.CircleGeometry(1.6, 16).rotateX(-Math.PI / 2),
@@ -297,49 +305,17 @@ export class WorldScene {
   }
 
   /** The realm itself: ground, territory, forests and hills. Rebuilt when the realm changes. */
-  setRealm(map: RealmMap, base: HTMLCanvasElement, territory: HTMLCanvasElement): void {
+  setRealm(map: RealmMap): void {
     for (const child of [...this.statics.children]) {
       this.statics.remove(child);
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
-        // Only the realm's own pictures (ground, territory); shared surface materials stay.
-        const m = child.material as THREE.Material | THREE.Material[];
-        if (!Array.isArray(m) && m instanceof THREE.MeshBasicMaterial) m.map?.dispose();
-        if (
-          !Array.isArray(m) &&
-          m instanceof THREE.MeshStandardMaterial &&
-          m.map instanceof THREE.CanvasTexture
-        )
-          m.map.dispose();
-      }
+      if (child instanceof THREE.Mesh && child !== this.groundMesh?.mesh) child.geometry.dispose();
     }
+    this.groundMesh?.dispose();
     this.map = map;
     this.size = map.size;
-    const W = map.size * U;
-    const groundTex = new THREE.CanvasTexture(base);
-    groundTex.colorSpace = THREE.SRGBColorSpace;
-    groundTex.anisotropy = 4;
-    const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95 });
-    addGroundDetail(groundMat, map.size * 5);
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(W, W).rotateX(-Math.PI / 2).translate(W / 2, 0, W / 2),
-      groundMat,
-    );
-    ground.receiveShadow = true;
-    this.statics.add(ground);
-    const terrTex = new THREE.CanvasTexture(territory);
-    terrTex.colorSpace = THREE.SRGBColorSpace;
-    const terr = new THREE.Mesh(
-      new THREE.PlaneGeometry(W, W).rotateX(-Math.PI / 2).translate(W / 2, 0.15, W / 2),
-      new THREE.MeshBasicMaterial({ map: terrTex, transparent: true, opacity: 0.85, depthWrite: false }),
-    );
-    this.statics.add(terr);
-    // A dark sea all around, so the edge of the world never shows.
-    const sea = new THREE.Mesh(
-      new THREE.PlaneGeometry(W * 6, W * 6).rotateX(-Math.PI / 2).translate(W / 2, -0.2, W / 2),
-      new THREE.MeshStandardMaterial({ color: '#12345c', roughness: 0.95 }),
-    );
-    this.statics.add(sea);
+    // The ground is drawn by the GPU from a tiny map of the realm (no stretched picture).
+    this.groundMesh = createGround(map, U);
+    this.statics.add(this.groundMesh.mesh);
     // Trees on every forest tile, rocks on the hills (seeded: same every visit).
     const rng = createRng(hashString(`world3d-${map.realm.id}`));
     const trees: Array<{ x: number; y: number; z: number; scale: number; rotation: number }> = [];
@@ -399,6 +375,11 @@ export class WorldScene {
       this.statics.add(m);
     }
     this.holdKey = '';
+  }
+
+  /** Who holds which tile, as alliance colours (tint and border lines on the ground). */
+  setTerritory(color: (x: number, y: number) => string | null): void {
+    this.groundMesh?.setOwners(color);
   }
 
   /** Holds, camps and nodes. Instances are rewritten only when something changed. */
@@ -552,6 +533,7 @@ export class WorldScene {
     c.removeEventListener('pointercancel', this.onUp);
     c.removeEventListener('wheel', this.onWheel);
     this.labelsRoot.remove();
+    this.groundMesh?.dispose();
     this.renderer.dispose();
     c.remove();
   }
@@ -661,6 +643,7 @@ export class WorldScene {
     this.last = now;
     this.time += dt;
     this.updateCamera();
+    this.groundMesh?.update(this.time);
     this.sun.position.set(this.target.x - 120, 260, this.target.y - 80);
     this.sun.target.position.set(this.target.x, 0, this.target.y);
     this.sun.castShadow = this.distance < 260 && this.renderer.shadowMap.enabled;
@@ -725,30 +708,29 @@ export class WorldScene {
           sh.update(this.time);
           continue;
         }
-        const kind =
-          m.unit === 'cart' && m.phase === 'back' ? 'cart' : m.unit === 'riders' ? 'horse' : 'soldier';
-        const pool = this.units[kind];
-        const n = kind === 'cart' ? 2 : kind === 'horse' ? 3 : 5;
         tmpC.set(m.color).lerp(new THREE.Color('#ffffff'), 0.55);
         const flags = this.units.flag;
-        for (let k = 0; k < n && pool.used < pool.mesh.instanceMatrix.count; k++) {
-          const back = k * (kind === 'cart' ? 5 : 2.2);
-          const side = ((k % 2) - 0.5) * (kind === 'soldier' ? 1.4 : 1.8);
-          const bx = x - Math.sin(dir) * back + Math.cos(dir) * side;
-          const bz = z - Math.cos(dir) * back - Math.sin(dir) * side;
-          const bob = kind === 'cart' ? 0 : Math.abs(Math.sin(this.time * 9 + k)) * 0.25;
-          place(
-            pool.mesh,
-            pool.used,
-            bx,
-            bob,
-            bz,
-            dir + (kind === 'soldier' ? 0 : -Math.PI / 2),
-            kind === 'soldier' ? 2.2 : 1.8,
-          );
-          pool.mesh.setColorAt(pool.used, tmpC);
-          pool.used++;
-        }
+        // One column: what leads it (carts, riders or rams), then warriors on foot.
+        const column = (kind: 'soldier' | 'horse' | 'cart' | 'ram', n: number, from: number) => {
+          const pool = this.units[kind];
+          const spacing = kind === 'cart' || kind === 'ram' ? 5 : 2.2;
+          for (let k = 0; k < n && pool.used < pool.mesh.instanceMatrix.count; k++) {
+            const back = from + k * spacing;
+            const side = ((k % 2) - 0.5) * (kind === 'soldier' ? 1.4 : kind === 'ram' ? 0 : 1.8);
+            const bx = x - Math.sin(dir) * back + Math.cos(dir) * side;
+            const bz = z - Math.cos(dir) * back - Math.sin(dir) * side;
+            const bob = kind === 'cart' || kind === 'ram' ? 0 : Math.abs(Math.sin(this.time * 9 + k)) * 0.25;
+            const scale = kind === 'soldier' ? 2.2 : kind === 'ram' ? 1.5 : 1.8;
+            place(pool.mesh, pool.used, bx, bob, bz, dir + (kind === 'soldier' ? 0 : -Math.PI / 2), scale);
+            pool.mesh.setColorAt(pool.used, tmpC);
+            pool.used++;
+          }
+          return from + n * spacing;
+        };
+        if (m.unit === 'cart' && m.phase === 'back') column('cart', 2, 0);
+        else if (m.unit === 'riders') column('horse', 3, 0);
+        else if (m.unit === 'siege') column('soldier', 3, column('ram', 2, 0));
+        else column('soldier', 5, 0);
         if (flags.used < flags.mesh.instanceMatrix.count) {
           place(flags.mesh, flags.used, x, 0.3, z, 0, 1);
           flags.mesh.setColorAt(flags.used, tmpC.set(m.color));
@@ -756,10 +738,50 @@ export class WorldScene {
         }
       }
     }
+    if (!far) this.updateHerds();
     for (const p of Object.values(this.units)) {
       p.mesh.count = p.used;
       p.mesh.instanceMatrix.needsUpdate = true;
       if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
+  /** Oxen and sheep graze by every hold near the camera, wandering slowly. */
+  private updateHerds(): void {
+    const ox = this.units.ox;
+    const sheep = this.units.sheep;
+    const reach = Math.max(160, this.distance * 1.6);
+    for (const h of this.holds) {
+      if (h.kind === 'fort' || h.kind === 'capital' || h.kind === 'town') continue;
+      const cx = (h.x + 0.5) * U;
+      const cz = (h.y + 0.5) * U;
+      if (Math.abs(cx - this.target.x) > reach || Math.abs(cz - this.target.y) > reach) continue;
+      const seed = hashString(h.key);
+      // Graze on the side of the hold that has dry land (never out at sea).
+      let side = ((seed % 628) / 100) * 1.0;
+      for (let k = 0; k < 8; k++) {
+        const a = side + (k * Math.PI) / 4;
+        const t =
+          this.map &&
+          tileAt(
+            this.map,
+            Math.floor(h.x + 0.5 + Math.cos(a) * 0.9),
+            Math.floor(h.y + 0.5 + Math.sin(a) * 0.9),
+          );
+        if (t && t.kind !== 'sea') {
+          side = a;
+          break;
+        }
+      }
+      const px = cx + Math.cos(side) * 6;
+      const pz = cz + Math.sin(side) * 6;
+      for (let k = 0; k < 5; k++) {
+        const pool = k < 2 ? ox : sheep;
+        if (pool.used >= pool.mesh.instanceMatrix.count) continue;
+        const a = this.time * (0.05 + k * 0.012) + k * 1.3 + seed * 0.001;
+        const r = 0.8 + (k % 3) * 0.6;
+        place(pool.mesh, pool.used++, px + Math.cos(a) * r, 0, pz + Math.sin(a) * r, -a, k < 2 ? 0.75 : 0.65);
+      }
     }
   }
 

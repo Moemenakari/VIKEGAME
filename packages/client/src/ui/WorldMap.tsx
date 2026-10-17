@@ -16,6 +16,7 @@ import {
   kingsWar,
   marchLimit,
   midgard,
+  forts,
   nearest,
   realmMap,
   sumCounts,
@@ -113,11 +114,14 @@ export function WorldMap({
   const others = online.players.filter((p) => p.realm === realmId && p.id !== online.userId);
   const map = useMemo(() => realmMap(realmId), [realmId]);
   const world = useMemo(() => midgard(realmId), [realmId]);
-  const base = useMemo(() => paintBase(map), [map]);
+  // The painted 2D map is only needed when the 3D map cannot run.
+  const [no3d, setNo3d] = useState(false);
+  const base = useMemo(() => (no3d ? paintBase(map) : null), [map, no3d]);
   const mine = realmId === state.world.realm;
   const ownedKey = mine ? state.world.owned.join(';') : '';
   const territory = useMemo(
     () =>
+      base &&
       paintTerritory(map, base, (x, y) => {
         const tile = tileAt(map, x, y)!;
         return mine ? tileOwner(state, tile) : tile.owner;
@@ -178,7 +182,7 @@ export function WorldMap({
   // 2D fallback (phones without WebGL): draw everything in one pass.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !base || !territory) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
@@ -445,7 +449,9 @@ export function WorldMap({
     const thing = world.at.get(key);
     const tile = tileAt(map, x, y);
     setSheet(null);
+    const fort = tile?.kind === 'fort' ? forts(realmId).find((f) => f.x === x && f.y === y) : undefined;
     if (player) setPicked({ kind: 'player', player });
+    else if (fort) setPicked({ kind: 'jarl', jarl: fort });
     else if (thing && !(mine && key === homeKey)) {
       if (thing.id.startsWith('j')) setPicked({ kind: 'jarl', jarl: thing as MapJarl });
       else if (thing.id.startsWith('c'))
@@ -465,7 +471,6 @@ export function WorldMap({
   // ---- the 3D map (owner request: real halls, marching warriors, riders, carts, ships) ----
   const stageRef = useRef<HTMLDivElement>(null);
   const scene3d = useRef<WorldScene | null>(null);
-  const [no3d, setNo3d] = useState(false);
   const pickRef = useRef(pick);
   pickRef.current = pick;
   const liveRef = useRef({ state, realmId, traffic: [] as Traffic[] });
@@ -491,8 +496,17 @@ export function WorldMap({
   const traffic = useMemo(() => realmTraffic(realmId), [realmId]);
   liveRef.current = { state, realmId, traffic };
   useEffect(() => {
-    scene3d.current?.setRealm(map, base, territory);
-  }, [map, base, territory, no3d]);
+    scene3d.current?.setRealm(map);
+  }, [map, no3d]);
+  // Territories: alliance colours, and yours in gold.
+  useEffect(() => {
+    scene3d.current?.setTerritory((x, y) => {
+      const tile = tileAt(map, x, y)!;
+      if (tile.kind === 'sea') return null;
+      const owner = mine ? tileOwner(state, tile) : tile.owner;
+      return owner === -1 ? '#ffd677' : owner === null ? null : ALLIANCES[owner]!.color;
+    });
+  }, [map, ownedKey, no3d]);
   // Holds, camps and nodes for the 3D map (instances only change when this list does).
   useEffect(() => {
     const sc = scene3d.current;
@@ -600,7 +614,7 @@ export function WorldMap({
   const war = kingsWar(now, state.world.realm);
   const vsResultNow = mine ? vsResult(state) : null;
   const targetName = (m: March) => {
-    const o = world.jarls.find((q) => q.id === m.target);
+    const o = [...world.jarls, ...forts(realmId)].find((q) => q.id === m.target);
     if (o) return o.name;
     const cp = world.camps.find((q) => q.id === m.target);
     if (cp) return t(`camp_${cp.kind}`);
@@ -1860,7 +1874,7 @@ function realmTraffic(realmId: number): Traffic[] {
       toY: goal.y,
       period: 90_000 + (i % 5) * 20_000,
       offset: (i * 0.137) % 1,
-      unit: i % 8 ? 'cart' : i % 3 ? 'troops' : 'riders',
+      unit: i % 8 ? 'cart' : i % 3 === 0 ? 'riders' : i % 3 === 1 ? 'siege' : 'troops',
       alliance: j.alliance,
     });
   });
@@ -1917,6 +1931,7 @@ function marchViews(
             ? 1
             : 1 - (now - m.doneAt) / Math.max(1, m.returnAt - m.doneAt);
       const riders = Object.keys(m.troops).some((id) => TROOPS[id]?.type === 'cavalry');
+      const siege = Object.keys(m.troops).some((id) => TROOPS[id]?.type === 'siege');
       out.push({
         id: `m${m.id}`,
         fromX: state.world.home.x,
@@ -1925,7 +1940,7 @@ function marchViews(
         toY: m.y,
         at: Math.max(0, Math.min(1, at)),
         phase,
-        unit: m.kind === 'gather' ? 'cart' : riders ? 'riders' : 'troops',
+        unit: m.kind === 'gather' ? 'cart' : siege ? 'siege' : riders ? 'riders' : 'troops',
         color: ME,
         battle: m.kind !== 'gather' && now >= m.arriveAt && now < m.arriveAt + 5_000,
       });

@@ -296,8 +296,10 @@ export function startMarch(
   rally = false,
 ): string | null {
   const world = midgard(state.world.realm);
-  const target = [...world.jarls, ...world.camps, ...world.nodes].find((o) => o.id === targetId);
-  const isJarl = targetId.startsWith('j');
+  const target = [...world.jarls, ...forts(state.world.realm), ...world.camps, ...world.nodes].find(
+    (o) => o.id === targetId,
+  );
+  const isJarl = targetId.startsWith('j') || targetId.startsWith('f');
   const isCamp = targetId.startsWith('c');
   if (!target || (kind === 'attack') !== isJarl || (kind === 'hunt') !== isCamp)
     return 'Nothing to march on there';
@@ -380,7 +382,10 @@ export function recallMarch(state: GameState, id: number, now: number): string |
 function fightAt(state: GameState, m: March, events: GameEvent[]): void {
   const world = midgard(state.world.realm);
   const rng = createRng(state.rngState);
-  const jarl = m.kind === 'attack' ? world.jarls.find((j) => j.id === m.target) : undefined;
+  const jarl =
+    m.kind === 'attack'
+      ? [...world.jarls, ...forts(state.world.realm)].find((j) => j.id === m.target)
+      : undefined;
   const camp = m.kind === 'hunt' ? world.camps.find((c) => c.id === m.target) : undefined;
   if (!jarl && !camp) return;
   const attackers: Combatant[] = Object.entries(m.troops).map(([id, count]) => {
@@ -593,7 +598,9 @@ export function jarlHeroes(jarl: MapJarl): Array<{ id: string; level: number }> 
 
 /** Scouts a jarl's hold: warriors, wall, stores and heroes, in a report. Returns an error, or null. */
 export function scoutJarl(state: GameState, jarlId: string, now: number, events: GameEvent[]): string | null {
-  const jarl = midgard(state.world.realm).jarls.find((j) => j.id === jarlId);
+  const jarl = [...midgard(state.world.realm).jarls, ...forts(state.world.realm)].find(
+    (j) => j.id === jarlId,
+  );
   if (!jarl) return 'Nothing to march on there';
   if (jarl.alliance !== null && jarl.alliance === state.world.alliance)
     return 'This jarl is in your alliance';
@@ -629,4 +636,33 @@ export function scoutJarl(state: GameState, jarlId: string, now: number, events:
   state.reports = [report, ...state.reports].slice(0, MILITARY.maxReports);
   events.push({ type: 'scout.done', reportId: report.id });
   return null;
+}
+
+const fortCache = new Map<number, MapJarl[]>();
+
+/**
+ * The alliances' ring forts as targets (owner request: "attack anything you are strong
+ * enough for"). A fort is held like a great jarl's hold, the King's alliance strongest;
+ * a rally of the alliance is the sensible way to take one.
+ */
+export function forts(realmId: number): MapJarl[] {
+  const hit = fortCache.get(realmId);
+  if (hit) return hit;
+  const map = realmMap(realmId);
+  const king = REALMS.find((r) => r.id === realmId)?.kingAlliance;
+  const out = map.seats.map((seat) => {
+    const level = seat.alliance === king ? MIDGARD.fortLevel + 2 : MIDGARD.fortLevel;
+    return {
+      id: `f${seat.alliance}`,
+      name: `${ALLIANCES[seat.alliance]!.name} Ring Fort`,
+      alliance: seat.alliance,
+      x: seat.x,
+      y: seat.y,
+      level,
+      power: Math.round(jarlStrengthOf(level) * 9 + level * 1_800),
+      avatar: 0,
+    };
+  });
+  fortCache.set(realmId, out);
+  return out;
 }

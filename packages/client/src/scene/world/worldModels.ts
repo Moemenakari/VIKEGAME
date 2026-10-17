@@ -269,3 +269,83 @@ export function addGroundDetail(material: THREE.MeshStandardMaterial, repeat: nu
       );
   };
 }
+
+/** An ox grazing by a farm (the Viking Age plough and cart beast). */
+export function oxModel(): THREE.Mesh {
+  const kit = new ModelBuilder();
+  const hide = paint('#6e5640', 'cloth');
+  kit.add(new THREE.CapsuleGeometry(0.42, 0.9, 4, 8), hide, [0, 0.95, 0], [0, 0, Math.PI / 2]);
+  kit.add(new THREE.SphereGeometry(0.3, 8, 6), hide, [0.82, 0.95, 0], [0, 0, 0], [1.2, 0.9, 0.9]);
+  for (const z of [-0.22, 0.22])
+    kit.add(
+      new THREE.ConeGeometry(0.05, 0.35, 5),
+      paint('#e8dcc4', 'plain'),
+      [0.85, 1.25, z],
+      [0.6 * Math.sign(z), 0, -0.4],
+    );
+  for (const [x, z] of [
+    [-0.45, -0.2],
+    [-0.45, 0.2],
+    [0.45, -0.2],
+    [0.45, 0.2],
+  ] as const)
+    kit.add(new THREE.CylinderGeometry(0.08, 0.07, 0.6, 5), paint('#3a2a1e', 'plain'), [x, 0.3, z]);
+  return kit.build('ox');
+}
+
+export function sheepModel(): THREE.Mesh {
+  const kit = new ModelBuilder();
+  kit.add(
+    new THREE.IcosahedronGeometry(0.45, 1),
+    paint('#ece6da', 'cloth'),
+    [0, 0.62, 0],
+    [0, 0, 0],
+    [1.35, 0.95, 0.9],
+  );
+  kit.add(
+    new THREE.IcosahedronGeometry(0.2, 1),
+    paint('#2c2826', 'plain'),
+    [0.62, 0.75, 0],
+    [0, 0, 0],
+    [1.3, 1, 0.9],
+  );
+  for (const [x, z] of [
+    [-0.3, -0.18],
+    [-0.3, 0.18],
+    [0.3, -0.18],
+    [0.3, 0.18],
+  ] as const)
+    kit.add(new THREE.CylinderGeometry(0.05, 0.05, 0.4, 5), paint('#2c2826', 'plain'), [x, 0.2, z]);
+  return kit.build('sheep');
+}
+
+/** A covered battering ram on wheels (Siege of Paris, 885–886): the war machines of the march. */
+export function ramModel(): THREE.Mesh {
+  const kit = new ModelBuilder();
+  const wood = paint('#6a4a2e', 'wood');
+  kit.add(new THREE.BoxGeometry(3, 0.25, 1.4), wood, [0, 0.7, 0]);
+  for (const x of [-1.1, 1.1])
+    for (const z of [-0.78, 0.78])
+      kit.add(
+        new THREE.CylinderGeometry(0.42, 0.42, 0.15, 12),
+        paint('#3d2a1c', 'timber'),
+        [x, 0.42, z],
+        [Math.PI / 2, 0, 0],
+      );
+  // The roof of hides over the ram.
+  kit.add(
+    new THREE.CylinderGeometry(0.01, 1.1, 1.3, 4, 1),
+    paint('#8a6e4c', 'cloth'),
+    [0, 1.5, 0],
+    [0, Math.PI / 4, 0],
+    [1.9, 1, 0.9],
+  );
+  kit.add(
+    new THREE.CylinderGeometry(0.2, 0.22, 3.6, 8),
+    paint('#5a3e28', 'timber'),
+    [0.4, 1.05, 0],
+    [0, 0, Math.PI / 2],
+  );
+  kit.add(new THREE.SphereGeometry(0.28, 8, 6), paint('#8d939a', 'metal'), [2.2, 1.05, 0]);
+  return kit.build('ram');
+}
