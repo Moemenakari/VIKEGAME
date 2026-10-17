@@ -16,6 +16,7 @@ import {
   BATTLE_DROPS,
   vsStandings,
   type Cost,
+  type ShopId,
 } from '@jarlheim/sim';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { GameStore } from '../game/store';
@@ -42,6 +43,7 @@ import {
 } from './icons';
 import { PlotPanel } from './PlotPanel';
 import { WorldMap } from './WorldMap';
+import { ShopPanel } from './ShopPanel';
 import { RewardBurst, type Burst } from './RewardBurst';
 import { botMessages } from './botChat';
 import { ChatPanel } from './ChatPanel';
@@ -78,6 +80,7 @@ type Panel =
   | 'chat'
   | 'heroes'
   | 'bag'
+  | 'shop'
   | null;
 
 /** A building being placed (new) or moved (moveId), at a spot measured from the hall. */
@@ -204,6 +207,7 @@ function Game({
   const prefs = usePrefs();
   const [placing, setPlacing] = useState<Placing | null>(null);
   const [burst, setBurst] = useState<Burst | null>(null);
+  const [shopTab, setShopTab] = useState<ShopId>('gold');
   const endBurst = useCallback(() => setBurst(null), []);
 
   const select = useCallback((id: string | null) => {
@@ -537,6 +541,14 @@ function Game({
               </button>
             );
           })}
+          <button
+            className="hero shop-button"
+            onClick={() => openPanel('shop')}
+            aria-label={t('shop')}
+            data-testid="shop-button"
+          >
+            🏪
+          </button>
         </aside>
 
         {((selected && selected !== 'longship') || panel === 'build') && !placing && (
@@ -624,6 +636,16 @@ function Game({
         {panel === 'reports' && (
           <ReportsPanel state={state} onOpen={openReport} onClose={() => setPanel(null)} />
         )}
+        {panel === 'shop' && (
+          <ShopPanel
+            store={store}
+            state={state}
+            tab={shopTab}
+            setTab={setShopTab}
+            onClose={() => setPanel(null)}
+            onError={onError}
+          />
+        )}
         {panel === 'heroes' && (
           <HeroesPanel store={store} state={state} onClose={() => setPanel(null)} onError={onError} />
         )}
@@ -655,6 +677,10 @@ function Game({
             }}
             online={online}
             onSignIn={() => setPanel('chat')}
+            onOpenShop={(tab) => {
+              setShopTab(tab);
+              setPanel('shop');
+            }}
           />
         )}
         {report && <ReportView report={report} onClose={() => setReportId(null)} />}

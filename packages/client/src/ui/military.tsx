@@ -1,5 +1,6 @@
 import {
   BUILDINGS,
+  HEROES,
   DRAUGR_BANDS,
   DRAUGR_UNITS,
   ECONOMY,
@@ -380,6 +381,7 @@ const TYPE_ORDER: UnitType[] = [
 ];
 
 export function ReportView({ report, onClose }: { report: BattleReport; onClose: () => void }) {
+  if (report.scout) return <ScoutView report={report} onClose={onClose} />;
   return (
     <section className="card panel report" data-testid="report" role="dialog" aria-label={report.title}>
       <button className="close" onClick={onClose} aria-label={t('close')}>
@@ -488,6 +490,50 @@ export function ReportsPanel({
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** What scouts saw in a hold: its warriors, wall, stores and heroes (owner request). */
+function ScoutView({ report, onClose }: { report: BattleReport; onClose: () => void }) {
+  const sc = report.scout!;
+  return (
+    <section className="card panel report" data-testid="report" role="dialog" aria-label={report.title}>
+      <button className="close" onClick={onClose} aria-label={t('close')}>
+        ×
+      </button>
+      <p className="banner won">👁 {t('scoutReport')}</p>
+      <h2>{report.title.split(' · ')[1]}</h2>
+      <p className="norse">
+        {t('jarlLevel', { n: report.level })} · ⚔ {formatAmount(sc.power)}
+      </p>
+      <div className="saga">
+        {report.saga.map((line, i) => (
+          <p key={i}>{line}</p>
+        ))}
+      </div>
+      <h3>{t('garrison')}</h3>
+      <p className="stat" data-testid="scout-troops">
+        {Object.entries(sc.troops).map(([id, n]) => (
+          <span key={id} className="cost">
+            <TroopTypeIcon type={TROOPS[id]?.type ?? 'shieldwall'} size={14} /> {formatAmount(n)}{' '}
+            {troopName(id)}
+          </span>
+        ))}
+      </p>
+      {sc.wall > 0 && <p className="stat">🧱 {t('wallPower', { n: formatAmount(sc.wall) })}</p>}
+      <h3>{t('stores')}</h3>
+      <p className="stat">
+        <CostLine cost={sc.stores} />
+      </p>
+      <h3>{t('heroes')}</h3>
+      <p className="stat">
+        {sc.heroes.map((h) => (
+          <span key={h.id} className="cost">
+            {HEROES.find((x) => x.id === h.id)?.name.split(',')[0]} · Lv {h.level}
+          </span>
+        ))}
+      </p>
     </section>
   );
 }

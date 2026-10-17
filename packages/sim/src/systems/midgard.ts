@@ -13,6 +13,8 @@ import { killsOf, recordBattle } from './items';
 import { addCounts, armyStrength, sumCounts, woundedCapacity } from './military';
 import { hallLevel } from './economy';
 import { PVP } from './pvp';
+import { EARN, STAMINA, WARFARE } from '../data/shops';
+import { HEROES } from '../data/heroes';
 import { realmMap, tileKey, type Tile } from './world';
 
 /**
@@ -291,6 +293,7 @@ export function startMarch(
   troops: Record<string, number>,
   now: number,
   events: GameEvent[],
+  rally = false,
 ): string | null {
   const world = midgard(state.world.realm);
   const target = [...world.jarls, ...world.camps, ...world.nodes].find((o) => o.id === targetId);
@@ -309,10 +312,17 @@ export function startMarch(
     return isJarl ? 'This hold is under a peace shield' : 'Nothing is left there for now';
   if (state.marches.some((m) => m.target === targetId)) return 'Your warriors are already on their way there';
   if (state.marches.length >= marchLimit(state)) return 'All your march columns are out';
+  const stamina = kind === 'hunt' ? (STAMINA.cost[(target as MapCamp).kind] ?? 10) : 0;
+  if (state.wallet.stamina < stamina) return 'Not enough stamina';
+  const allies = rally ? rallyAllies(state) : undefined;
+  if (rally && !allies) return 'No alliance-mates can join a rally';
   const sent = takeTroops(state, troops);
   if (typeof sent === 'string') return sent;
+  state.wallet.stamina -= stamina;
   const travel = travelMs(state, target.x, target.y);
-  let doneAt = now + travel;
+  // A rally waits for the alliance to gather before it sets out.
+  const start = now + (rally ? WARFARE.rallyWaitMs : 0);
+  let doneAt = start + travel;
   if (kind === 'gather') {
     const plan = gatherPlan(target as MapNode, sent);
     if (plan.amount <= 0) return 'Choose warriors to send';
@@ -328,11 +338,12 @@ export function startMarch(
     y: target.y,
     troops: sent,
     startAt: now,
-    arriveAt: now + travel,
+    arriveAt: start + travel,
     doneAt,
     returnAt: doneAt + travel,
     load: {},
     reportId: null,
+    ...(allies ? { allies } : {}),
   };
   state.marches.push(march);
   events.push({ type: 'march.started', kind, target: targetId });
@@ -376,6 +387,18 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
     const t = TROOPS[id]!;
     return { key: id, name: t.name, type: t.type, count, atk: t.atk, def: t.def, hp: t.hp };
   });
+  for (const [id, count] of Object.entries(m.allies ?? {})) {
+    const t = TROOPS[id]!;
+    attackers.push({
+      key: `ally-${id}`,
+      name: t.name,
+      type: t.type,
+      count,
+      atk: t.atk,
+      def: t.def,
+      hp: t.hp,
+    });
+  }
   const defenders = jarl ? jarlDefenders(jarl) : campDefenders(camp!);
   const hm = heroMods(state, jarl ? 'conquest' : 'barrow');
   const outcome = resolveBattle(attackers, defenders, rng, { attacker: hm.ours, defender: hm.theirs });
@@ -387,6 +410,18 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
   const alive: Record<string, number> = {};
   for (const s of outcome.attacker) {
     const fallen = s.start - s.alive;
+    if (s.key.startsWith('ally-')) {
+      // Alliance-mates' warriors: in the report, but not yours to heal or lose.
+      lines.push({
+        unit: s.key,
+        name: `⚑ ${s.name}`,
+        type: s.type,
+        start: s.start,
+        dead: fallen,
+        wounded: 0,
+      });
+      continue;
+    }
     const hurt = Math.min(room, Math.floor(fallen * MILITARY.woundedShare));
     room -= hurt;
     if (hurt > 0) addCounts(state.army.wounded, { [s.key]: hurt });
@@ -416,6 +451,13 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
     if (total > cap && total > 0)
       for (const r of PRODUCED_RESOURCES) if (load[r]) load[r] = Math.floor(load[r]! * (cap / total));
     state.world.cleared[m.target] = m.arriveAt + (jarl ? MIDGARD.jarlShieldMs : MIDGARD.campRespawnMs);
+    if (camp) {
+      // Camps hide a little Gold, and hunting for an alliance earns alliance points.
+      const gold = (EARN.campGold[camp.kind] ?? 0) + Math.floor(camp.level / 3);
+      if (gold > 0) load.gold = gold;
+      if (state.world.alliance !== null) state.wallet.alliance += EARN.alliancePerHuntLevel * camp.level;
+    }
+    if (jarl && m.allies) state.wallet.alliance += EARN.alliancePerRallyLevel * jarl.level;
   }
   m.load = load;
   const name = jarl ? jarl.name : CAMPS[camp!.kind].name;
@@ -476,6 +518,10 @@ export function advanceMarches(state: GameState, now: number, events: GameEvent[
       state.marches = state.marches.filter((q) => q !== m);
       addCounts(state.army.troops, m.troops);
       for (const [r, v] of Object.entries(m.load)) state.resources[r as keyof Cost] += v ?? 0;
+      if (m.kind === 'gather' && state.world.alliance !== null) {
+        const total = Object.values(m.load).reduce((a, b) => a + (b ?? 0), 0);
+        state.wallet.alliance += Math.floor(total * EARN.alliancePerGathered);
+      }
       const report = m.reportId ? state.reports.find((r) => r.id === m.reportId) : undefined;
       events.push({
         type: 'march.returned',
@@ -500,4 +546,87 @@ export function nearest<T extends { x: number; y: number }>(list: T[], x: number
     }
   }
   return best;
+}
+
+/** Your alliance-mates who answer a rally (the strongest first), as one band of warriors. */
+export function rallyAllies(state: GameState): Record<string, number> | undefined {
+  const a = state.world.alliance;
+  if (a === null) return undefined;
+  // In the war zone your alliance came with you: its jarls are those of your home realm.
+  const realm = state.world.origin?.realm ?? state.world.realm;
+  const mates = midgard(realm)
+    .jarls.filter((j) => j.alliance === a)
+    .sort((p, q) => q.power - p.power)
+    .slice(0, WARFARE.rallySlots);
+  if (!mates.length) return undefined;
+  const out: Record<string, number> = {};
+  for (const j of mates) {
+    const tier = Math.min(3, 1 + Math.floor((j.level - 1) / 6));
+    for (const type of ['shieldwall', 'berserker', 'archer'] as const) {
+      const t = TROOPS[`${type}-${tier}`]!;
+      const per = armyStrength([{ ...t, count: 1 }]);
+      const n = Math.round((jarlStrengthOf(j.level) * WARFARE.rallyShare) / 3 / per);
+      if (n > 0) out[t.id] = (out[t.id] ?? 0) + n;
+    }
+  }
+  return out;
+}
+
+export const rallySize = (state: GameState) => {
+  const a = state.world.alliance;
+  if (a === null) return 0;
+  const realm = state.world.origin?.realm ?? state.world.realm;
+  return Math.min(WARFARE.rallySlots, midgard(realm).jarls.filter((j) => j.alliance === a).length);
+};
+
+/** The heroes leading a jarl's hold (three saga heroes, deterministic per jarl). */
+export function jarlHeroes(jarl: MapJarl): Array<{ id: string; level: number }> {
+  const rng = createRng(hashString(`heroes-${jarl.id}-${jarl.name}`));
+  const pool = HEROES.map((h) => h.id);
+  const out: Array<{ id: string; level: number }> = [];
+  while (out.length < 3 && pool.length) {
+    const [id] = pool.splice(nextInt(rng, 0, pool.length - 1), 1);
+    out.push({ id: id!, level: Math.max(1, jarl.level * 3 + nextInt(rng, -3, 3)) });
+  }
+  return out;
+}
+
+/** Scouts a jarl's hold: warriors, wall, stores and heroes, in a report. Returns an error, or null. */
+export function scoutJarl(state: GameState, jarlId: string, now: number, events: GameEvent[]): string | null {
+  const jarl = midgard(state.world.realm).jarls.find((j) => j.id === jarlId);
+  if (!jarl) return 'Nothing to march on there';
+  if (jarl.alliance !== null && jarl.alliance === state.world.alliance)
+    return 'This jarl is in your alliance';
+  const cost = WARFARE.scoutSilverPerLevel * jarl.level;
+  if (state.resources.silver < cost) return 'Not enough Silver';
+  state.resources.silver -= cost;
+  const defenders = jarlDefenders(jarl);
+  const troops: Record<string, number> = {};
+  let wall = 0;
+  for (const d of defenders) {
+    if (d.type === 'wall') wall = d.hp;
+    else troops[d.key] = d.count;
+  }
+  const stores: Cost = {};
+  for (const [r, v] of Object.entries(MIDGARD.jarlStores))
+    stores[r as keyof Cost] = Math.floor(v * jarl.level);
+  const tag = jarl.alliance !== null ? `[${ALLIANCES[jarl.alliance]!.tag}] ` : '';
+  const report: BattleReport = {
+    id: state.nextReportId++,
+    at: now,
+    kind: 'scout',
+    level: jarl.level,
+    title: `Scouted · ${tag}${jarl.name}`,
+    won: true,
+    rounds: 0,
+    attacker: [],
+    defender: [],
+    saga: [`Your scouts crept up to the hold of ${jarl.name} and counted what they saw.`],
+    reward: {},
+    scout: { troops, wall, stores, heroes: jarlHeroes(jarl), power: jarl.power },
+    read: false,
+  };
+  state.reports = [report, ...state.reports].slice(0, MILITARY.maxReports);
+  events.push({ type: 'scout.done', reportId: report.id });
+  return null;
 }

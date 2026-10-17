@@ -51,6 +51,11 @@ export function useItem(
       h.level += count * def.levels;
       break;
     }
+    case 'teleport':
+      return 'Use it on the world map';
+    case 'stamina':
+      state.wallet.stamina += def.amount * count;
+      break;
     case 'starShard': {
       if (!target || !('heroId' in target)) return 'Choose a hero';
       const h = state.heroes.owned[target.heroId];

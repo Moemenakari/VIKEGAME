@@ -7,6 +7,7 @@ import {
   freshProfile,
   freshBag,
   freshMarches,
+  freshWallet,
   freshRaids,
   freshWorld,
   plotSpot,
@@ -50,6 +51,12 @@ const migrations: Record<number, (state: Record<string, unknown>) => Record<stri
     ...freshMarches(),
     ...state,
     world: { cleared: {}, ...((state.world ?? {}) as Record<string, unknown>) },
+  }),
+  // v8 → v9: wallet (alliance points, VS medals, stamina), shops, and the war zone.
+  8: (state) => ({
+    ...freshWallet(typeof state.lastTick === 'number' ? state.lastTick : 0),
+    ...state,
+    world: { origin: null, ...((state.world ?? {}) as Record<string, unknown>) },
   }),
 };
 
@@ -114,6 +121,7 @@ function isGameState(s: unknown): s is GameState {
   if (!isObj(w) || !isNum(w.realm) || !isObj(w.home) || !Array.isArray(w.owned) || !isObj(w.cleared))
     return false;
   if (!Array.isArray(s.marches) || !isNum(s.nextMarchId) || !isObj(s.vs) || !isNum(s.vs.points)) return false;
+  if (!isObj(s.wallet) || !isNum(s.wallet.stamina) || !isObj(s.shop) || !isObj(s.shop.bought)) return false;
   const raid = s.raid;
   if (!isObj(raid) || !isNum(raid.count) || !(raid.nextAt === null || isNum(raid.nextAt))) return false;
   return (

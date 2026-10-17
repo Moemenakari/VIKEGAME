@@ -27,6 +27,15 @@ import {
   travelMs,
   vsResult,
   vsStandings,
+  warZone,
+  STAMINA,
+  WARFARE,
+  freeSpot,
+  rallyAllies,
+  rallySize,
+  teleportGoldPrice,
+  type Command,
+  type ShopId,
   cleanSnapshot,
   hallLevel,
   type GameState,
@@ -52,10 +61,15 @@ import { paintBase, paintTerritory } from './worldArt';
  * Drawn on one canvas in one pass (no DOM per tile or per object).
  */
 
-/** Colours that say who is who, at every zoom (owner request). */
-const ME = '#ffd677';
-const ALLY = '#5fd36a';
-const NEUTRAL = '#c9c9c9';
+/**
+ * Colours that say who is who, at every zoom, as in the genre (owner request): your hold
+ * white, your alliance blue, the rest of your realm yellow, enemies red (your VS rival,
+ * and everyone in the realm you are at war with).
+ */
+const ME = '#ffffff';
+const ALLY = '#3fa0ff';
+const NEUTRAL = '#f2c94c';
+const ENEMY = '#ff4a3d';
 
 const CAMP_GLYPH = { wolves: '🐺', bear: '🐻', outlaws: '🏕️', draugr: '💀' } as const;
 const NODE_GLYPH = { farm: '🌾', wood: '🌲', iron: '⛏️', silver: '💰' } as const;
@@ -78,6 +92,7 @@ export function WorldMap({
   onReport,
   online,
   onSignIn,
+  onOpenShop,
 }: {
   store: GameStore;
   state: GameState;
@@ -86,8 +101,11 @@ export function WorldMap({
   onReport: (id: number) => void;
   online: Online;
   onSignIn: () => void;
+  onOpenShop: (tab: ShopId) => void;
 }) {
   const [realmId, setRealmId] = useState(state.world.realm);
+  /** The cloud screen while your hold moves (as in the genre). */
+  const [clouds, setClouds] = useState<string | null>(null);
   const { refresh } = online;
   useEffect(() => void refresh(realmId), [refresh, realmId]);
   const others = online.players.filter((p) => p.realm === realmId && p.id !== online.userId);
@@ -126,21 +144,31 @@ export function WorldMap({
   const now = store.now();
   const myPlayerAlliance = online.mine?.alliance?.id ?? null;
 
-  /** Who a hold belongs to, as a colour: you, your alliance, a rival alliance, or no one. */
-  const jarlColor = (alliance: number | null) =>
-    alliance === null
-      ? NEUTRAL
-      : mine && alliance === state.world.alliance
+  const homeRealm = state.world.origin?.realm ?? state.world.realm;
+  const zone = warZone(now, homeRealm);
+  const enemyRealm = zone.live && realmId === zone.enemy.id;
+  const vsRival = useMemo(
+    () => vsStandings(state, now).mine?.rival ?? null,
+    [state.vs, state.world.alliance],
+  );
+  /** Who a hold belongs to, as a colour: your alliance, an enemy, or neutral. */
+  const relation = (alliance: number | null) =>
+    enemyRealm
+      ? ENEMY
+      : alliance !== null && alliance === state.world.alliance
         ? ALLY
-        : ALLIANCES[alliance]!.color;
+        : alliance !== null && alliance === vsRival
+          ? ENEMY
+          : NEUTRAL;
+  const jarlColor = relation;
   const playerColor = (p: RealmPlayer) =>
-    (p.alliance && p.alliance.id === myPlayerAlliance) ||
-    (!p.alliance && p.aiAlliance !== null && p.aiAlliance === state.world.alliance)
-      ? ALLY
-      : p.alliance
-        ? '#bfe9ff'
-        : p.aiAlliance !== null
-          ? ALLIANCES[p.aiAlliance]!.color
+    enemyRealm
+      ? ENEMY
+      : (p.alliance && p.alliance.id === myPlayerAlliance) ||
+          (!p.alliance && p.aiAlliance !== null && p.aiAlliance === state.world.alliance)
+        ? ALLY
+        : !p.alliance && p.aiAlliance !== null && p.aiAlliance === vsRival
+          ? ENEMY
           : NEUTRAL;
   const homeKey = tileKey(state.world.home.x, state.world.home.y);
   const playerAt = useMemo(() => new Map(others.map((p) => [tileKey(p.x, p.y), p])), [others]);
@@ -312,14 +340,8 @@ export function WorldMap({
     for (const seat of map.seats) {
       const a = ALLIANCES[seat.alliance]!;
       if (!onScreen(seat.x, seat.y)) continue;
-      hold(seat.x, seat.y, a.color, '🏰', far ? 1.6 : 1.25);
-      label(
-        seat.x,
-        seat.y,
-        `[${a.tag}]`,
-        mine && seat.alliance === state.world.alliance ? ALLY : a.color,
-        far ? 0.9 : 1,
-      );
+      hold(seat.x, seat.y, relation(seat.alliance), '🏰', far ? 1.6 : 1.25);
+      label(seat.x, seat.y, `[${a.tag}]`, relation(seat.alliance), far ? 0.9 : 1);
     }
 
     // Your marches: a dashed road and a moving column.
@@ -436,6 +458,18 @@ export function WorldMap({
   const centre = (x: number, y: number, scale?: number) =>
     setView((v) => ({ x: x + 0.5, y: y + 0.5, scale: scale ?? Math.max(v.scale, 22) }));
 
+  /** Moves your hold (any teleport), behind the clouds, and shows where you landed. */
+  const move = (cmd: Extract<Command, { type: 'teleport' }>, text: string) => {
+    const err = store.dispatch(cmd);
+    if (err) return onError(err.message);
+    const w = store.snapshot.world;
+    setPicked(null);
+    setSheet(null);
+    setClouds(text);
+    setTimeout(() => setClouds(null), 1400);
+    setRealmId(w.realm);
+    setView((v) => ({ x: w.home.x + 0.5, y: w.home.y + 0.5, scale: Math.max(v.scale, 22) }));
+  };
   const war = kingsWar(now, state.world.realm);
   const vsResultNow = mine ? vsResult(state) : null;
   const targetName = (m: March) => {
@@ -501,6 +535,34 @@ export function WorldMap({
             🗺 {t('zoomAll')}
           </button>
         </div>
+        <div className="world-wallet">
+          <button onClick={() => onOpenShop('energy')} data-testid="stamina">
+            ⚡ {state.wallet.stamina}/{STAMINA.max}
+          </button>
+          <button onClick={() => onOpenShop('gold')}>
+            <ResourceIcon res="gold" size={14} /> {formatAmount(state.resources.gold)}
+          </button>
+          <span className="legend">
+            <i style={{ background: ALLY }} /> {t('legendAlly')} <i style={{ background: NEUTRAL }} />{' '}
+            {t('legendNeutral')} <i style={{ background: ENEMY }} /> {t('legendEnemy')}
+          </span>
+        </div>
+        {state.world.origin && (
+          <div className="war-banner" data-testid="war-banner">
+            ⚔{' '}
+            {t('inWarZone', {
+              n: state.world.realm,
+              t: formatDuration(Math.max(0, state.world.origin.until - now)),
+            })}
+            <button
+              className="secondary small"
+              data-testid="go-home"
+              onClick={() => move({ type: 'teleport', mode: 'home' }, t('movingHome'))}
+            >
+              🛖 {t('goHome')}
+            </button>
+          </div>
+        )}
       </header>
       <aside className="world-side">
         {mine && (
@@ -552,14 +614,27 @@ export function WorldMap({
       {mine && state.marches.length > 0 && !picked && !sheet && (
         <ul className="world-marches" data-testid="marches">
           {state.marches.map((m) => {
+            const rallyEnds = m.allies ? m.startAt + WARFARE.rallyWaitMs : 0;
             const phase =
-              now < m.arriveAt ? 'm_out' : now < m.doneAt && m.kind === 'gather' ? 'm_gathering' : 'm_back';
+              now < rallyEnds
+                ? 'm_rally'
+                : now < m.arriveAt
+                  ? 'm_out'
+                  : now < m.doneAt && m.kind === 'gather'
+                    ? 'm_gathering'
+                    : 'm_back';
             const left =
-              now < m.arriveAt ? m.arriveAt - now : now < m.doneAt ? m.doneAt - now : m.returnAt - now;
+              now < rallyEnds
+                ? rallyEnds - now
+                : now < m.arriveAt
+                  ? m.arriveAt - now
+                  : now < m.doneAt
+                    ? m.doneAt - now
+                    : m.returnAt - now;
             return (
               <li key={m.id}>
                 <button className="link" onClick={() => centre(m.x, m.y)}>
-                  {m.kind === 'gather' ? '🛒' : '⚔️'} {targetName(m)}
+                  {m.kind === 'gather' ? '🛒' : m.allies ? '⚑' : '⚔️'} {targetName(m)}
                 </button>
                 <span className="muted">
                   {t(phase)} · {formatDuration(Math.max(0, left))}
@@ -680,6 +755,29 @@ export function WorldMap({
           <h2>🔍 {t('find')}</h2>
           <p className="muted">{t('findHow')}</p>
           <div className="find-grid">
+            <button
+              className="secondary"
+              data-testid="find-jarl"
+              onClick={() => {
+                // The nearest hold that is not your alliance's and not under a peace shield.
+                const j = nearest(
+                  world.jarls.filter(
+                    (q) =>
+                      (q.alliance === null || q.alliance !== state.world.alliance) &&
+                      !isCleared(state, q.id, now) &&
+                      tileKey(q.x, q.y) !== homeKey,
+                  ),
+                  state.world.home.x,
+                  state.world.home.y,
+                );
+                if (!j) return onError(t('findNone'));
+                centre(j.x, j.y, 26);
+                pick(j.x, j.y);
+              }}
+            >
+              <span className="emoji-icon">🏠</span>
+              {t('findJarl')}
+            </button>
             {(
               [
                 ...(Object.keys(CAMP_GLYPH) as Array<keyof typeof CAMP_GLYPH>).map((k) => ['c', k] as const),
@@ -714,6 +812,25 @@ export function WorldMap({
               </button>
             ))}
           </div>
+          <h3>🌀 {t('teleports')}</h3>
+          <div className="find-grid">
+            <button
+              className="secondary"
+              data-testid="tp-random"
+              onClick={() => move({ type: 'teleport', mode: 'random', buy: true }, t('moving'))}
+            >
+              🎲 {t('item_teleport-random')} ×{state.items['teleport-random'] ?? 0}
+            </button>
+            <button
+              className="secondary"
+              data-testid="tp-alliance"
+              disabled={state.world.alliance === null}
+              onClick={() => move({ type: 'teleport', mode: 'alliance' }, t('moving'))}
+            >
+              ⚑ {t('item_teleport-alliance')} ×{state.items['teleport-alliance'] ?? 0}
+            </button>
+          </div>
+          <p className="muted">{t('teleportHow')}</p>
         </div>
       )}
 
@@ -749,6 +866,28 @@ export function WorldMap({
             </div>
           )}
           <p className="muted">{t('kingsWarHow')}</p>
+          <h3>⚔ {t('warZone')}</h3>
+          {state.world.origin ? (
+            <p className="stat">
+              {t('inWarZone', {
+                n: state.world.realm,
+                t: formatDuration(Math.max(0, state.world.origin.until - now)),
+              })}
+            </p>
+          ) : zone.live ? (
+            <button
+              className="primary"
+              data-testid="tp-war"
+              onClick={() =>
+                move({ type: 'teleport', mode: 'war', buy: true }, t('movingWar', { n: zone.enemy.id }))
+              }
+            >
+              🌀 {t('goWarZone', { n: zone.enemy.id })} · ×{state.items['teleport-war'] ?? 0}
+            </button>
+          ) : (
+            <p className="muted">{t('warZoneClosed')}</p>
+          )}
+          <p className="muted">{t('warZoneHow')}</p>
           <button className="primary" onClick={() => setSheet('vs')}>
             VS · {t('vs')}
           </button>
@@ -765,8 +904,15 @@ export function WorldMap({
           now={now}
           onError={onError}
           onReport={onReport}
+          onMove={move}
           onClose={() => setPicked(null)}
         />
+      )}
+
+      {clouds && (
+        <div className="clouds" data-testid="clouds">
+          <p>{clouds}</p>
+        </div>
       )}
 
       <button className="world-home" onClick={onClose} aria-label={t('myHold')} data-testid="world-home">
@@ -785,6 +931,7 @@ function PickCard({
   now,
   onError,
   onReport,
+  onMove,
   onClose,
 }: {
   picked: Picked;
@@ -795,6 +942,7 @@ function PickCard({
   now: number;
   onError: (m: string) => void;
   onReport: (id: number) => void;
+  onMove: (cmd: Extract<Command, { type: 'teleport' }>, text: string) => void;
   onClose: () => void;
 }) {
   switch (picked.kind) {
@@ -820,6 +968,7 @@ function PickCard({
           mine={mine}
           onError={onError}
           onReport={onReport}
+          onMove={onMove}
           onClose={onClose}
         />
       );
@@ -835,6 +984,7 @@ function PickCard({
           mine={mine}
           now={now}
           onError={onError}
+          onReport={onReport}
           onClose={onClose}
         />
       );
@@ -849,10 +999,13 @@ function TroopPicker({
   testId,
   info,
   onSend,
+  allies,
 }: {
   state: GameState;
   /** Strength of the defenders, or null when there is no battle (gathering). */
   theirs: number | null;
+  /** Alliance-mates' warriors marching with yours (a rally). */
+  allies?: Record<string, number> | undefined;
   action: string;
   testId: string;
   info?: (send: Record<string, number>) => ReactNode;
@@ -863,7 +1016,11 @@ function TroopPicker({
   );
   const [left, setLeft] = useState<Record<string, boolean>>({});
   const send = Object.fromEntries(Object.entries(land).filter(([id]) => !left[id]));
-  const ours = armyStrength(Object.entries(send).map(([id, count]) => ({ ...TROOPS[id]!, count })));
+  const ours = armyStrength(
+    Object.entries(send)
+      .concat(Object.entries(allies ?? {}))
+      .map(([id, count]) => ({ ...TROOPS[id]!, count })),
+  );
   const verdict =
     theirs === null ? null : ours >= theirs * 1.6 ? 'favourable' : ours >= theirs * 1.1 ? 'even' : 'risky';
   return (
@@ -908,6 +1065,7 @@ function MapTargetCard({
   mine,
   now,
   onError,
+  onReport,
   onClose,
 }: {
   picked: Extract<Picked, { kind: 'jarl' | 'camp' | 'node' }>;
@@ -916,9 +1074,10 @@ function MapTargetCard({
   mine: boolean;
   now: number;
   onError: (m: string) => void;
+  onReport: (id: number) => void;
   onClose: () => void;
 }) {
-  const [sending, setSending] = useState(false);
+  const [sending, setSending] = useState<false | 'attack' | 'rally'>(false);
   const o = picked.kind === 'jarl' ? picked.jarl : picked.kind === 'camp' ? picked.camp : picked.node;
   const march = mine ? state.marches.find((m) => m.target === o.id) : undefined;
   const until = state.world.cleared[o.id] ?? 0;
@@ -957,20 +1116,68 @@ function MapTargetCard({
         </div>
       </div>
     );
-    if (gone) body = <p className="stat">🛡 {t('shieldFor', { t: formatDuration(until - now) })}</p>;
+    const scoutCost = WARFARE.scoutSilverPerLevel * j.level;
+    const scout = mine && !ally && (
+      <button
+        className="secondary"
+        data-testid="scout"
+        onClick={() => {
+          const before = state.nextReportId;
+          const err = store.dispatch({ type: 'scout', jarlId: j.id });
+          if (err) return onError(err.message);
+          onClose();
+          onReport(before);
+        }}
+      >
+        👁 {t('scout')} · <ResourceIcon res="silver" size={13} /> {scoutCost}
+      </button>
+    );
+    const slots = rallySize(state);
+    if (gone)
+      body = (
+        <>
+          <p className="stat">🛡 {t('shieldFor', { t: formatDuration(until - now) })}</p>
+          <div className="card-actions">{scout}</div>
+        </>
+      );
     else if (mine && !ally && !march)
       body = !sending ? (
-        <button className="primary" onClick={() => setSending(true)} data-testid="attack-jarl">
-          ⚔ {t('attackHold')}
-        </button>
+        <div className="card-actions">
+          {scout}
+          <button className="primary" onClick={() => setSending('attack')} data-testid="attack-jarl">
+            ⚔ {t('attackHold')}
+          </button>
+          <button
+            className="primary"
+            disabled={slots === 0}
+            onClick={() => setSending('rally')}
+            data-testid="rally"
+          >
+            ⚑ {t('rally')} ({slots}/{WARFARE.rallySlots})
+          </button>
+        </div>
       ) : (
         <TroopPicker
           state={state}
           theirs={armyStrength(jarlDefenders(j))}
-          action={`⚔ ${t('march')}`}
-          testId="march-jarl"
-          info={() => marchInfo}
-          onSend={(troops) => dispatch({ type: 'attackJarl', jarlId: j.id, troops })}
+          allies={sending === 'rally' ? (rallyAllies(state) ?? {}) : undefined}
+          action={sending === 'rally' ? `⚑ ${t('rally')}` : `⚔ ${t('march')}`}
+          testId={sending === 'rally' ? 'march-rally' : 'march-jarl'}
+          info={() => (
+            <>
+              {sending === 'rally' && (
+                <p className="muted">{t('rallyHow', { n: slots, t: formatDuration(WARFARE.rallyWaitMs) })}</p>
+              )}
+              {marchInfo}
+            </>
+          )}
+          onSend={(troops) =>
+            dispatch(
+              sending === 'rally'
+                ? { type: 'rally', jarlId: j.id, troops }
+                : { type: 'attackJarl', jarlId: j.id, troops },
+            )
+          }
         />
       );
   } else if (picked.kind === 'camp') {
@@ -1004,7 +1211,7 @@ function MapTargetCard({
     if (gone) body = <p className="muted">{t('campGone', { t: formatDuration(until - now) })}</p>;
     else if (mine && !march)
       body = !sending ? (
-        <button className="primary" onClick={() => setSending(true)} data-testid="hunt">
+        <button className="primary" onClick={() => setSending('attack')} data-testid="hunt">
           ⚔ {t('hunt')}
         </button>
       ) : (
@@ -1013,7 +1220,14 @@ function MapTargetCard({
           theirs={armyStrength(defenders)}
           action={`⚔ ${t('march')}`}
           testId="march-hunt"
-          info={() => marchInfo}
+          info={() => (
+            <>
+              <p className="muted">
+                ⚡ {t('staminaCost', { n: STAMINA.cost[cp.kind] ?? 10, h: state.wallet.stamina })}
+              </p>
+              {marchInfo}
+            </>
+          )}
           onSend={(troops) => dispatch({ type: 'hunt', campId: cp.id, troops })}
         />
       );
@@ -1036,7 +1250,7 @@ function MapTargetCard({
     if (gone && !march) body = <p className="muted">{t('nodeTaken', { t: formatDuration(until - now) })}</p>;
     else if (mine && !march)
       body = !sending ? (
-        <button className="primary" onClick={() => setSending(true)} data-testid="gather">
+        <button className="primary" onClick={() => setSending('attack')} data-testid="gather">
           🛒 {t('gather')}
         </button>
       ) : (
@@ -1098,6 +1312,7 @@ function TileCard({
   mine,
   onError,
   onReport,
+  onMove,
   onClose,
 }: {
   store: GameStore;
@@ -1106,6 +1321,7 @@ function TileCard({
   mine: boolean;
   onError: (m: string) => void;
   onReport: (id: number) => void;
+  onMove: (cmd: Extract<Command, { type: 'teleport' }>, text: string) => void;
   onClose: () => void;
 }) {
   const [sending, setSending] = useState(false);
@@ -1148,6 +1364,24 @@ function TileCard({
       )}
       {tile.kind === 'capital' && <p>{t('capitalHow')}</p>}
       {tile.kind === 'fort' && <p>{t('fortHow')}</p>}
+      {mine && freeSpot(state, state.world.realm, tile.x, tile.y) && !sending && (
+        <button
+          className="secondary"
+          data-testid="move-here"
+          onClick={() =>
+            onMove({ type: 'teleport', mode: 'advanced', x: tile.x, y: tile.y, buy: true }, t('moving'))
+          }
+        >
+          🌀 {t('moveHere')} ·{' '}
+          {(state.items['teleport-advanced'] ?? 0) > 0 ? (
+            `×${state.items['teleport-advanced']}`
+          ) : (
+            <>
+              <ResourceIcon res="gold" size={13} /> {teleportGoldPrice('advanced')}
+            </>
+          )}
+        </button>
+      )}
       {canTry && !sending && (
         <button className="primary" disabled={full} onClick={() => setSending(true)} data-testid="conquer">
           ⚔ {full ? t('landFull') : t('conquer')}

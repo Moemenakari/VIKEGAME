@@ -264,11 +264,34 @@ test('the globe opens Midgard: realms, alliances, the King and the wars', async 
   await page.waitForTimeout(200);
   await page.screenshot({ path: 'test-results/world-near.png' });
   await page.getByLabel('Close').click();
+  // Scout the nearest rival hold: its warriors, wall, stores and heroes.
+  await page.getByTestId('find-button').click();
+  await page.getByTestId('find-jarl').click();
+  await expect(page.getByTestId('rally')).toBeVisible();
+  await page.getByTestId('scout').click();
+  await expect(page.getByTestId('scout-troops')).toBeVisible();
+  await page.screenshot({ path: 'test-results/scout.png' });
+  await page.getByLabel('Close').click();
+  // Move the hold to free land (the starting Settler's Charter), behind the clouds.
+  await page.getByTestId('find-button').click();
+  await page.getByTestId('tp-random').click();
+  await expect(page.getByTestId('clouds')).toBeVisible();
+  await page.waitForTimeout(1600);
+  await page.screenshot({ path: 'test-results/moved.png' });
   await page.getByTestId('realm-2').click();
   await page.waitForTimeout(200);
   await page.screenshot({ path: 'test-results/realm2.png' });
   await page.getByTestId('world-home').click();
   await expect(page.getByTestId('world-map')).toBeHidden();
+
+  // The shops: buy a Rune of Haste with Gold.
+  await page.getByTestId('shop-button').click();
+  await expect(page.getByTestId('shop')).toBeVisible();
+  const before = (await page.evaluate(() => window.__jarlheim!.state().items['speed-1h'])) ?? 0;
+  await page.getByTestId('buy-g-speed-1h').click();
+  expect(await page.evaluate(() => window.__jarlheim!.state().items['speed-1h'])).toBe(before + 1);
+  await page.getByTestId('shop-tab-energy').click();
+  await page.screenshot({ path: 'test-results/shop.png' });
   expect(errors).toEqual([]);
 });
 

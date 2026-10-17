@@ -6,6 +6,8 @@ import type { GameEvent } from '../events';
 import { createRng, hashString, nextFloat } from '../rng';
 import type { GameState } from '../state';
 import { addItems } from './items';
+import { itemDef } from '../data/items';
+import { EARN } from '../data/shops';
 import { alliancePower, midgard } from './midgard';
 
 const DAY = 86_400_000;
@@ -44,17 +46,19 @@ export function rollVs(state: GameState, now: number): void {
 }
 
 /** VS points a step's events earn under today's theme. */
-export function vsPoints(events: GameEvent[], theme: VsTheme): number {
+export function vsPoints(events: GameEvent[], theme: VsTheme, warZone = false): number {
   const p = VS.points;
   let n = 0;
   for (const e of events) {
     switch (theme) {
       case 'build':
         if (e.type === 'construction.started') n += p.build.started;
+        if (e.type === 'item.used' && e.queue === 'build') n += p.speedupPerMinute * speedMinutes(e);
         if (e.type === 'building.completed') n += p.build.completedPerLevel * e.level;
         break;
       case 'train':
         if (e.type === 'training.completed') n += p.train.perTier * e.count * (TROOPS[e.troopId]?.tier ?? 1);
+        if (e.type === 'item.used' && e.queue === 'train') n += p.speedupPerMinute * speedMinutes(e);
         break;
       case 'gather':
         if (e.type === 'march.returned' && e.kind === 'gather')
@@ -67,21 +71,33 @@ export function vsPoints(events: GameEvent[], theme: VsTheme): number {
         break;
       case 'war':
         if (e.type === 'battle.resolved' && e.won && (e.kind === 'jarl' || e.kind === 'conquest'))
-          n += p.war.win + p.war.perLevel * e.level;
+          n += (p.war.win + p.war.perLevel * e.level) * (warZone && e.kind === 'jarl' ? p.war.warZone : 1);
         if (e.type === 'pvp.fought' && e.won) n += p.war.win * 2;
         if (e.type === 'raid.resolved' && e.won) n += p.war.win;
         break;
       case 'heroes':
         if (e.type === 'heroes.recruited') n += p.heroes.recruit * e.heroes.length;
+        if (e.type === 'item.used' && e.itemId === 'hero-scroll') n += p.heroes.scroll * e.count;
+        if (e.type === 'item.used' && e.itemId === 'star-shard') n += p.heroes.shard * e.count;
         break;
     }
   }
   return Math.round(n);
 }
 
+/** Minutes of speed-up in an item.used event. */
+function speedMinutes(e: Extract<GameEvent, { type: 'item.used' }>): number {
+  const def = itemDef(e.itemId);
+  return def?.kind === 'speedup' ? def.minutes * e.count : 0;
+}
+
 export function trackVs(state: GameState, events: GameEvent[], now: number): void {
   rollVs(state, now);
-  state.vs.points += vsPoints(events, vsSeason(now).theme);
+  const before = state.vs.points;
+  state.vs.points += vsPoints(events, vsSeason(now).theme, !!state.world.origin);
+  // A VS medal for every 100 points, to spend in the VS shop.
+  state.wallet.medals +=
+    Math.floor(state.vs.points / EARN.vsPointsPerMedal) - Math.floor(before / EARN.vsPointsPerMedal);
 }
 
 /** This season's alliances in rank order (strength, shuffled a little each season), paired 1v2, 3v4… */
@@ -212,6 +228,7 @@ export function claimVs(state: GameState, events: GameEvent[]): string | null {
   if (!r) return 'No VS reward to claim';
   addItems(state, r.items);
   if (r.reward.gold) state.resources.gold += r.reward.gold;
+  if (r.alliance !== null) state.wallet.medals += r.won ? EARN.medalsWin : EARN.medalsLose;
   state.vs.claimed = r.season;
   events.push({ type: 'vs.claimed', won: r.won, items: r.items, reward: r.reward });
   return null;

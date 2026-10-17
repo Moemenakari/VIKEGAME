@@ -52,7 +52,11 @@ import {
   upgradeDurationMs,
 } from './systems/economy';
 import { rollQuestDay, trackQuests } from './systems/quests';
-import { advanceMarches, midgard, recallMarch, startMarch } from './systems/midgard';
+import { advanceMarches, midgard, recallMarch, scoutJarl, startMarch } from './systems/midgard';
+import { buy, regenStamina } from './systems/shops';
+import { advanceWarZone, teleport } from './systems/teleport';
+import type { ShopId } from './data/shops';
+import type { TeleportMode } from './data/items';
 import { claimVs, trackVs } from './systems/vs';
 import { itemDef } from './data/items';
 
@@ -87,6 +91,17 @@ export type Command =
   | { type: 'hunt'; campId: string; troops: Record<string, number> }
   | { type: 'attackJarl'; jarlId: string; troops: Record<string, number> }
   | { type: 'recall'; marchId: number }
+  | { type: 'rally'; jarlId: string; troops: Record<string, number> }
+  | { type: 'scout'; jarlId: string }
+  | { type: 'buy'; shop: ShopId; offerId: string; count: number }
+  | {
+      type: 'teleport';
+      mode: TeleportMode | 'home';
+      x?: number;
+      y?: number;
+      /** Pay the Gold price when you have no teleport item. */
+      buy?: boolean;
+    }
   | { type: 'claimVs' }
   | { type: 'upgrade'; buildingId: string }
   | { type: 'finishFree'; buildingId: string; queue?: TimerKind }
@@ -239,6 +254,8 @@ function advanceInPlace(state: GameState, now: number, events: GameEvent[]): voi
   if (state.healing && state.healing.endsAt <= now) completeHealing(state, events);
   advanceRaids(state, now, events);
   advanceMarches(state, now, events);
+  advanceWarZone(state, now, events);
+  regenStamina(state, now);
 
   if (Object.values(produced).some((v) => v > 0)) {
     events.push({ type: 'resources.produced', amounts: produced });
@@ -482,6 +499,12 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     const err = useItem(state, cmd.itemId, cmd.count, cmd.target, now);
     if (err) return fail('NOT_READY', err);
     const def = itemDef(cmd.itemId);
+    events.push({
+      type: 'item.used',
+      itemId: cmd.itemId,
+      count: cmd.count,
+      ...(cmd.target && 'queue' in cmd.target ? { queue: cmd.target.queue } : {}),
+    });
     if (def?.kind === 'chest') {
       const reward: Cost = {};
       for (const [r, v] of Object.entries(def.contents)) reward[r as keyof Cost] = (v ?? 0) * cmd.count;
@@ -503,6 +526,29 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
   attackJarl(state, cmd, now, events) {
     const err = startMarch(state, 'attack', cmd.jarlId, cmd.troops, now, events);
     return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
+  },
+
+  rally(state, cmd, now, events) {
+    const err = startMarch(state, 'attack', cmd.jarlId, cmd.troops, now, events, true);
+    return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
+  },
+
+  scout(state, cmd, now, events) {
+    const err = scoutJarl(state, cmd.jarlId, now, events);
+    return err
+      ? fail('NOT_READY', err, err.includes('Silver') ? { kind: 'resource', resource: 'silver' } : undefined)
+      : null;
+  },
+
+  buy(state, cmd, now, events) {
+    const err = buy(state, cmd.shop, cmd.offerId, cmd.count, now, events);
+    return err ? fail('NOT_ENOUGH', err) : null;
+  },
+
+  teleport(state, cmd, now, events) {
+    const target = cmd.x !== undefined && cmd.y !== undefined ? { x: cmd.x, y: cmd.y } : undefined;
+    const err = teleport(state, cmd.mode, target, !!cmd.buy, now, events);
+    return err ? fail('NOT_READY', err) : null;
   },
 
   recall(state, cmd, now) {

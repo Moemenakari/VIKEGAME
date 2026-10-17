@@ -15,10 +15,13 @@ export const VS = {
   points: {
     build: { started: 300, completedPerLevel: 150 },
     train: { perTier: 12 },
+    /** Speed-ups saved for the right day (build or train) score per minute. */
+    speedupPerMinute: 20,
     gather: { food: 1, timber: 1, iron: 5, silver: 10 },
     hunt: { perLevel: 600 },
-    war: { win: 2_500, perLevel: 250 },
-    heroes: { recruit: 700 },
+    /** Wins against jarls in the war zone (the enemy realm) score double. */
+    war: { win: 2_500, perLevel: 250, warZone: 2 },
+    heroes: { recruit: 700, scroll: 400, shard: 1_200 },
   },
   /** AI alliances: season total at full strength, and how much it varies. */
   allianceBase: 110_000,

@@ -225,6 +225,8 @@ const ITEM_ICON: Record<ItemDef['kind'], string> = {
   chest: '📦',
   heroXp: '📜',
   starShard: '✴',
+  teleport: '🌀',
+  stamina: '⚡',
 };
 
 function BagView({
@@ -299,15 +301,19 @@ function BagView({
               <small className="muted">{itemText(item)}</small>
             </span>
             <b className="bag-count">×{state.items[item.id]}</b>
-            <button
-              className="primary small"
-              data-testid={`use-${item.id}`}
-              onClick={() =>
-                item.kind === 'chest' ? use(item) : setUsing(using === item.id ? null : item.id)
-              }
-            >
-              {t('use')}
-            </button>
+            {item.kind !== 'teleport' && (
+              <button
+                className="primary small"
+                data-testid={`use-${item.id}`}
+                onClick={() =>
+                  item.kind === 'chest' || item.kind === 'stamina'
+                    ? use(item)
+                    : setUsing(using === item.id ? null : item.id)
+                }
+              >
+                {t('use')}
+              </button>
+            )}
             {using === item.id && item.kind === 'speedup' && (
               <div className="use-targets">
                 {timers.length === 0 && <p className="muted">{t('noTimers')}</p>}
@@ -357,6 +363,10 @@ function itemText(item: ItemDef): string {
       return t('item_heroXp');
     case 'starShard':
       return t('item_star');
+    case 'teleport':
+      return t(`item_tp_${item.mode}`);
+    case 'stamina':
+      return t('item_stamina', { n: item.amount });
   }
 }
 

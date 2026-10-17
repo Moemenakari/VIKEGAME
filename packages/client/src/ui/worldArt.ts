@@ -32,6 +32,7 @@ export function paintBase(map: RealmMap): HTMLCanvasElement {
   const seed = hashString(`midgard-art-${map.realm.id}`);
   const wobble = createNoise2D(seed);
   const grain = createNoise2D(seed ^ 0x2545f491);
+  const biome = createNoise2D(seed ^ 0x68e31da4);
   const land = new Float32Array(n * n);
   const rgb = new Float32Array(n * n * 3);
   for (const t of map.tiles) {
@@ -70,6 +71,27 @@ export function paintBase(map: RealmMap): HTMLCanvasElement {
         r = sample(rgb, gx, gy, 3, 0);
         gg = sample(rgb, gx, gy, 3, 1);
         b = sample(rgb, gx, gy, 3, 2);
+        // Lands differ (owner request): dry heath, green grassland and bogs with dark pools.
+        const wet = biome(px * 0.012, py * 0.012) + g * 0.08;
+        if (wet < -0.3) {
+          const k = Math.min(1, (-0.3 - wet) * 2.5) * 0.7;
+          r = mix(r, 198, k);
+          gg = mix(gg, 176, k);
+          b = mix(b, 128, k);
+        } else if (wet > 0.38) {
+          const k = Math.min(1, (wet - 0.38) * 2.5) * 0.65;
+          r = mix(r, 84, k);
+          gg = mix(gg, 110, k);
+          b = mix(b, 88, k);
+          if (g > 0.5 && k > 0.35) {
+            r = mix(r, 62, 0.7);
+            gg = mix(gg, 98, 0.7);
+            b = mix(b, 112, 0.7);
+          }
+        } else {
+          gg = Math.min(255, gg + 10);
+          r -= 6;
+        }
         // Snow grows towards the north (the top of the map), and on high ground.
         const north = Math.max(0, 1 - py / (W * 0.55));
         const snow = Math.min(0.75, north * 0.8 + Math.max(0, g) * 0.15);

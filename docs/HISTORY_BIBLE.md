@@ -87,6 +87,16 @@ so do we. Every historical element in the game should trace back to a row here.
 | ***Grettis saga*** (Glámr), ***Eyrbyggja saga*** (the restless dead) | **Draugr Mounds** |
 | Bog-iron working; the **Spillings** (Gotland) and **Cuerdale** (England) silver hoards; Skuldelev oak | Gathering nodes: Bog-iron Marsh, Buried Hoard, Old Oak Wood, Barley Fields |
 
+### Added with shops, teleports and the war zone (D-051–D-053)
+
+| Source | Used for |
+|---|---|
+| The **war-arrow** (*herǫr*), sent from farm to farm to call men to arms (Heimskringla; Norwegian *leiðangr* law) | **War Arrow**: crosses to the enemy realm during the war |
+| **Landnámabók**: settlers choosing and claiming land | **Settler’s Charter** (move to a spot you choose); **Wanderer’s Lot** (a random spot) |
+| **Mead** (*mjǫðr*) at feasts and before battle (Hávamál; Beowulf’s mead-hall) | **Horn / Cask of Mead**: stamina for hunting |
+| **Hacksilver** and weighed silver as money | Silver paying for scouts and the Energy shop |
+| Scouting before a raid (*njósn*, spying, in the sagas) | **Scout reports** |
+
 ## 3. Things we deliberately leave out
 - **Slavery** (thralls were real, but we leave them out).
 - Real religious sites as raid targets. Monsters and rivals are the enemies.

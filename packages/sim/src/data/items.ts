@@ -8,7 +8,18 @@ export type ItemDef =
   | { id: string; kind: 'speedup'; minutes: number; name: string }
   | { id: string; kind: 'chest'; contents: Cost; name: string }
   | { id: string; kind: 'heroXp'; levels: number; name: string }
-  | { id: string; kind: 'starShard'; name: string };
+  | { id: string; kind: 'starShard'; name: string }
+  /** Moves your hold on the map (used from the world map, never from the Bag). */
+  | { id: string; kind: 'teleport'; mode: TeleportMode; name: string }
+  /** Restores stamina, which hunting camps costs. */
+  | { id: string; kind: 'stamina'; amount: number; name: string };
+
+/**
+ * Ways to move your hold (owner request, as in the genre): to a random free spot, to a
+ * spot you choose, next to your alliance's ring fort, or across to the enemy realm while
+ * the war is on. Moving home from the war zone is free.
+ */
+export type TeleportMode = 'random' | 'advanced' | 'alliance' | 'war';
 
 export const ITEMS: readonly ItemDef[] = [
   { id: 'speed-5m', kind: 'speedup', minutes: 5, name: 'Rune of Haste (5 min)' },
@@ -26,12 +37,24 @@ export const ITEMS: readonly ItemDef[] = [
   },
   { id: 'hero-scroll', kind: 'heroXp', levels: 1, name: 'Saga Scroll' },
   { id: 'star-shard', kind: 'starShard', name: 'Rune Shard' },
+  { id: 'teleport-random', kind: 'teleport', mode: 'random', name: 'Wanderer’s Lot' },
+  { id: 'teleport-advanced', kind: 'teleport', mode: 'advanced', name: 'Settler’s Charter' },
+  { id: 'teleport-alliance', kind: 'teleport', mode: 'alliance', name: 'Alliance Summons' },
+  { id: 'teleport-war', kind: 'teleport', mode: 'war', name: 'War Arrow' },
+  { id: 'stamina-10', kind: 'stamina', amount: 10, name: 'Horn of Mead' },
+  { id: 'stamina-50', kind: 'stamina', amount: 50, name: 'Cask of Mead' },
 ];
 
 export const itemDef = (id: string): ItemDef | undefined => ITEMS.find((i) => i.id === id);
 
 /** A new hold starts with a few speed-ups. */
-export const STARTING_ITEMS: Record<string, number> = { 'speed-5m': 3, 'speed-1h': 1, 'chest-spoils': 1 };
+export const STARTING_ITEMS: Record<string, number> = {
+  'speed-5m': 3,
+  'speed-1h': 1,
+  'chest-spoils': 1,
+  'teleport-random': 1,
+  'teleport-advanced': 1,
+};
 
 /** What battles drop (on top of their normal rewards). */
 export const BATTLE_DROPS = {

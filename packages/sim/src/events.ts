@@ -30,6 +30,10 @@ export type GameEvent =
       troops: number;
     }
   | { type: 'chest.opened'; reward: Cost }
+  | { type: 'item.used'; itemId: string; count: number; queue?: 'build' | 'train' | 'heal' }
+  | { type: 'shop.bought'; shop: string; item: string; count: number }
+  | { type: 'teleported'; mode: string; realm: number }
+  | { type: 'scout.done'; reportId: number }
   | { type: 'vs.claimed'; won: boolean; items: Record<string, number>; reward: Cost }
   | {
       type: 'pvp.fought';
