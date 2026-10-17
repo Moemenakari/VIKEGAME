@@ -67,7 +67,7 @@ export const BYNAMES = [
   'Shield-bearer',
 ] as const;
 
-export type CampKind = 'wolves' | 'bear' | 'outlaws' | 'draugr';
+export type CampKind = 'wolves' | 'bear' | 'outlaws' | 'draugr' | 'treasure';
 export type NodeKind = 'farm' | 'wood' | 'iron' | 'silver';
 
 export interface CampUnit {
@@ -140,6 +140,17 @@ export const CAMPS: Record<CampKind, CampDef> = {
     reward: { silver: 90, iron: 70 },
     drops: { 'hero-scroll': 1, 'chest-silver': 1 },
   },
+  // Treasure on the shore: a ship that foundered on the rocks (wrecks like Skuldelev lie all
+  // along the Norse sea roads). No one guards it: whoever gets there first hauls it home.
+  treasure: {
+    name: 'Shipwreck Chest',
+    source: 'Viking-Age wrecks (Skuldelev, Roskilde Fjord)',
+    minLevel: 1,
+    maxLevel: 10,
+    units: [],
+    reward: { silver: 80, gold: 2 },
+    drops: { 'chest-spoils': 1, 'speed-1h': 1 },
+  },
 };
 
 export interface NodeDef {
@@ -190,6 +201,9 @@ export const MIDGARD = {
   /** Jarls who belong to no alliance, out on the rim. */
   freeJarls: 12,
   camps: 40,
+  /** Shipwreck chests on the shores (unguarded, gone for an hour once taken). */
+  treasures: 10,
+  treasureRespawnMs: 60 * 60_000,
   nodes: { farm: 12, wood: 12, iron: 9, silver: 6 } satisfies Record<NodeKind, number>,
   /** Strength of a level-1 camp and its growth per level. */
   campStrength: 110,
@@ -220,6 +234,13 @@ export const MIDGARD = {
   marchesPerHall: 8,
   /** A beaten camp is gone for a while; a beaten jarl raises a peace shield; a gathered node regrows. */
   campRespawnMs: 20 * 60_000,
+  /** A jarl's column on the road is this share of the hold's strength, and its carts carry this share of its stores. */
+  columnShare: 0.3,
+  /** Rival jarls send scouts to your hold from this Great Hall level, about this often. */
+  spyFromHall: 5,
+  spyEveryMs: 6 * 60 * 60_000,
+  /** A redirected column needs at least this long to reach its new target. */
+  minRedirectMs: 5_000,
   jarlShieldMs: 30 * 60_000,
   nodeRegrowMs: 45 * 60_000,
 } as const;

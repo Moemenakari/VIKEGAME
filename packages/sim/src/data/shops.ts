@@ -68,7 +68,7 @@ export const STAMINA = {
   max: 100,
   /** One point back every 6 minutes. */
   regenMs: 6 * 60_000,
-  cost: { wolves: 8, bear: 10, outlaws: 10, draugr: 14 } as Record<string, number>,
+  cost: { wolves: 8, bear: 10, outlaws: 10, draugr: 14, treasure: 0 } as Record<string, number>,
 } as const;
 
 /** Alliance points and medals for deeds (balance lives here, not in the systems). */
@@ -80,7 +80,7 @@ export const EARN = {
   medalsWin: 300,
   medalsLose: 100,
   /** Gold found in camps: base + one per 3 levels. */
-  campGold: { wolves: 0, bear: 1, outlaws: 2, draugr: 4 } as Record<string, number>,
+  campGold: { wolves: 0, bear: 1, outlaws: 2, draugr: 4, treasure: 3 } as Record<string, number>,
 } as const;
 
 /** Rallies and scouting. */

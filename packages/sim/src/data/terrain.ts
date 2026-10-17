@@ -13,7 +13,7 @@ export const HOLD_TERRAIN = {
   /** Peak height of the fjord walls. */
   mountainHeight: 26,
   /** Radius of the flat settlement ground around the Great Hall (holds all building plots). */
-  hallClearingRadius: 23,
+  hallClearingRadius: 34,
   /** Trees and rocks. */
   treeAttempts: 5200,
   treeMinHeight: 1.0,

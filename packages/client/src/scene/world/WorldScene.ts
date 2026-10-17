@@ -67,7 +67,7 @@ export interface WorldViewData {
     id: string;
     x: number;
     y: number;
-    kind: 'wolves' | 'bear' | 'outlaws' | 'draugr';
+    kind: 'wolves' | 'bear' | 'outlaws' | 'draugr' | 'treasure';
     level: number;
   }>;
   nodes: Array<{
@@ -493,6 +493,9 @@ export class WorldScene {
         case 'draugr':
           put('barrow', createBarrow, cp.x, cp.y, 0.5, 0.3);
           break;
+        case 'treasure':
+          put('wreck-chest', chestModel, cp.x, cp.y, 1.9, (cp.x * 5 + cp.y) % 6);
+          break;
       }
     }
     for (const n of view.nodes) {
@@ -666,7 +669,7 @@ export class WorldScene {
     if (!p || p.moved) return;
     this.velocity.set(0, 0);
     const hit = this.groundAt(e.clientX, e.clientY);
-    if (hit) this.onTap(Math.floor(hit.x / U), Math.floor(hit.z / U));
+    if (hit) this.onTap(hit.x / U, hit.z / U);
   };
 
   private onWheel = (e: WheelEvent) => {

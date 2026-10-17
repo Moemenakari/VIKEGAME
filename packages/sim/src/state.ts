@@ -56,7 +56,7 @@ export interface ReportLine {
 export interface BattleReport {
   id: number;
   at: number;
-  kind: 'draugr' | 'raid' | 'conquest' | 'pvp' | 'hunt' | 'jarl' | 'scout';
+  kind: 'draugr' | 'raid' | 'conquest' | 'pvp' | 'hunt' | 'jarl' | 'scout' | 'spied';
   /** Barrow level, or the raid number. */
   level: number;
   title: string;
@@ -104,6 +104,8 @@ export interface March {
   reportId: number | null;
   /** A rally: alliance-mates' warriors march with yours (they are not yours to lose). */
   allies?: Record<string, number>;
+  /** Where the column set out on its current leg, if not from the hold (it changed course). */
+  from?: { x: number; y: number };
 }
 
 /** The Alliance VS (owner request): 3-day seasons, points from your deeds. */
@@ -203,6 +205,10 @@ export interface GameState {
       cleared: Record<string, number>;
       until: number;
     } | null;
+    /** Foes, shown red on the map: jarls who spied on or attacked you, and anyone you marked. */
+    foes?: string[];
+    /** When a rival jarl next sends scouts to your hold. */
+    spyAt?: number;
   };
   /** Alliance points, VS medals and stamina (earned by playing). */
   wallet: { alliance: number; medals: number; stamina: number; staminaAt: number };

@@ -12,7 +12,7 @@ import { addItems, killsOf, recordBattle, useItem, type ItemTarget } from './sys
 import { bordersHold, realmMap, tileAt, tileGarrison, tileKey, tileLimit, tileOwner } from './systems/world';
 import type { Cost } from './data/resources';
 import { DAILY_QUESTS } from './data/quests';
-import { AVATARS, DAILY_CHESTS, MAIN_QUESTS } from './data/mainQuests';
+import { AVATARS, DAILY_CHESTS, mainQuestAt } from './data/mainQuests';
 import { activityPoints, mainGoalDone } from './systems/goals';
 import { DRAUGR_BANDS, DRAUGR_UNITS } from './data/draugr';
 import { MILITARY, TRAINED_AT, TROOPS } from './data/troops';
@@ -53,7 +53,16 @@ import {
   upgradeDurationMs,
 } from './systems/economy';
 import { rollQuestDay, trackQuests } from './systems/quests';
-import { advanceMarches, midgard, recallMarch, scoutJarl, startMarch } from './systems/midgard';
+import {
+  advanceMarches,
+  advanceSpies,
+  markFoe,
+  midgard,
+  recallMarch,
+  redirectMarch,
+  scoutJarl,
+  startMarch,
+} from './systems/midgard';
 import { buy, regenStamina } from './systems/shops';
 import { advanceWarZone, teleport } from './systems/teleport';
 import type { ShopId } from './data/shops';
@@ -92,6 +101,9 @@ export type Command =
   | { type: 'hunt'; campId: string; troops: Record<string, number> }
   | { type: 'attackJarl'; jarlId: string; troops: Record<string, number> }
   | { type: 'recall'; marchId: number }
+  | { type: 'redirect'; marchId: number; targetId: string }
+  | { type: 'markFoe'; id: string; on: boolean }
+  | { type: 'intercept'; columnId: string; troops: Record<string, number> }
   | { type: 'rally'; jarlId: string; troops: Record<string, number> }
   | { type: 'scout'; jarlId: string }
   | { type: 'buy'; shop: ShopId; offerId: string; count: number }
@@ -256,6 +268,7 @@ function advanceInPlace(state: GameState, now: number, events: GameEvent[]): voi
   if (state.healing && state.healing.endsAt <= now) completeHealing(state, events);
   advanceRaids(state, now, events);
   advanceMarches(state, now, events);
+  advanceSpies(state, now, events);
   advanceWarZone(state, now, events);
   regenStamina(state, now);
 
@@ -551,6 +564,23 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     const target = cmd.x !== undefined && cmd.y !== undefined ? { x: cmd.x, y: cmd.y } : undefined;
     const err = teleport(state, cmd.mode, target, !!cmd.buy, now, events);
     return err ? fail('NOT_READY', err) : null;
+  },
+
+  redirect(state, cmd, now, events) {
+    const err = redirectMarch(state, cmd.marchId, cmd.targetId, now, events);
+    return err ? fail('NOT_READY', err) : null;
+  },
+
+  intercept(state, cmd, now, events) {
+    if (!cmd.columnId.startsWith('t')) return fail('UNKNOWN', 'Nothing to march on there');
+    const err = startMarch(state, 'attack', cmd.columnId, cmd.troops, now, events);
+    return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
+  },
+
+  markFoe(state, cmd) {
+    if (!cmd.id || cmd.id.length > 64) return fail('UNKNOWN', 'Nothing to mark');
+    markFoe(state, cmd.id, cmd.on);
+    return null;
   },
 
   recall(state, cmd, now) {
@@ -857,8 +887,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
   },
 
   claimMainQuest(state, _cmd, _now, events) {
-    const quest = MAIN_QUESTS[state.mainQuest];
-    if (!quest) return fail('NOT_READY', 'All main quests are done');
+    const quest = mainQuestAt(state.mainQuest);
     if (!mainGoalDone(state, quest.goal)) return fail('NOT_READY', 'Quest not finished yet');
     grant(state.resources, quest.reward);
     state.mainQuest++;

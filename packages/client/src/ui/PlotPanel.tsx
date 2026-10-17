@@ -24,6 +24,7 @@ import { formatAmount, formatCost, formatDuration } from './format';
 import { bDesc, bName, errorText, t } from './i18n';
 import { ResourceIcon } from './icons';
 import { HealSection, TrainSection } from './military';
+import { HelpTip } from './help';
 
 interface Props {
   store: GameStore;
@@ -76,6 +77,7 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
           ×
         </button>
         <h2>{t('build')}</h2>
+        <HelpTip id="build" state={state} />
         <p className="norse">{t('chooseBuild')}</p>
         <ul className="build-list">
           {options.map((type: BuildingType) => {
@@ -131,6 +133,7 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
         ×
       </button>
       <h2>{bName(building.type)}</h2>
+      <HelpTip id="building" state={state} />
       <p className="norse">
         {def.norse} · {building.level > 0 ? t('level', { n: building.level }) : t('beingRaised')}
       </p>

@@ -5,6 +5,7 @@ import type {
   ChatChannel,
   ChatMessage,
   ChatProfile,
+  RecoveryRequest,
   ConnectResult,
   FriendEntry,
   Reaction,
@@ -22,6 +23,7 @@ interface ProfileRow {
   display_name: string;
   vip_level: number;
   vip_points: number;
+  player_no?: number;
   last_seen_at?: string;
 }
 
@@ -42,6 +44,7 @@ const toProfile = (p: ProfileRow): ChatProfile => ({
   name: p.display_name,
   vip: p.vip_level,
   vipPoints: p.vip_points,
+  ...(p.player_no ? { playerNo: p.player_no } : {}),
 });
 
 function fail(error: { message: string } | null): void {
@@ -78,11 +81,7 @@ export class SupabaseBackend implements ChatBackend {
     const { data } = await this.sb.auth.getSession();
     if (!data.session) return { signedIn: false, me: null };
     const uid = data.session.user.id;
-    const { data: row, error } = await this.sb
-      .from('profiles')
-      .select('id, display_name, vip_level, vip_points')
-      .eq('id', uid)
-      .maybeSingle();
+    const { data: row, error } = await this.sb.from('profiles').select('*').eq('id', uid).maybeSingle();
     fail(error);
     this.me = row ? toProfile(row as ProfileRow) : null;
     if (this.me) this.startPresence();
@@ -113,9 +112,15 @@ export class SupabaseBackend implements ChatBackend {
     return this.createProfile(username.trim());
   }
 
-  async signIn(username: string, password: string): Promise<ConnectResult> {
+  async signIn(nameOrId: string, password: string): Promise<ConnectResult> {
+    let username = nameOrId.trim().toLowerCase();
+    if (/^\d{4,}$/.test(username)) {
+      const { data, error } = await this.sb.rpc('login_name', { p_id: Number(username) });
+      if (error || !data) throw new Error('No player has that ID');
+      username = data as string;
+    }
     const { error } = await this.sb.auth.signInWithPassword({
-      email: emailFor(username.trim().toLowerCase()),
+      email: emailFor(username),
       password,
     });
     if (error) throw new Error('Wrong username or password');
@@ -145,6 +150,22 @@ export class SupabaseBackend implements ChatBackend {
     const { data, error } = await this.sb.rpc('my_social_stats');
     fail(error);
     return data as { likes: number; roses: number; messages: number };
+  }
+
+  async requestRecovery(r: RecoveryRequest): Promise<void> {
+    fail(
+      (
+        await this.sb.rpc('request_recovery', {
+          p_name: r.name,
+          p_player_no: r.playerNo,
+          p_realm: r.realm,
+          p_alliance: r.alliance,
+          p_last_attacker: r.lastAttacker,
+          p_contact: r.contact,
+          p_note: r.note,
+        })
+      ).error,
+    );
   }
 
   async openTicket(topic: TicketTopic, body: string, meta: Record<string, string>): Promise<void> {

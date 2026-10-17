@@ -1,4 +1,4 @@
-import { ALLIANCES, vsStandings, type GameState } from '@jarlheim/sim';
+import { ALLIANCES, REALMS, vsStandings, type GameState } from '@jarlheim/sim';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { botMessages, botReply, isBot, type BotContext } from './botChat';
 import { chatBackend } from '../online';
@@ -197,9 +197,10 @@ function SignIn({
   act: (fn: () => Promise<unknown>) => Promise<void>;
   error: string | null;
 }) {
-  const [mode, setMode] = useState<'in' | 'up'>('in');
+  const [mode, setMode] = useState<'in' | 'up' | 'lost'>('in');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
+  if (mode === 'lost') return <Recovery chat={chat} act={act} error={error} onBack={() => setMode('in')} />;
   return (
     <div className="sign-in" data-testid="sign-in">
       <h2>{t('account')}</h2>
@@ -232,7 +233,7 @@ function SignIn({
         <input
           value={user}
           onChange={(e) => setUser(e.target.value)}
-          placeholder={t('username')}
+          placeholder={mode === 'up' ? t('username') : t('nameOrId')}
           autoComplete="username"
           data-testid="username"
         />
@@ -251,8 +252,102 @@ function SignIn({
       <button className="link" onClick={() => setMode(mode === 'up' ? 'in' : 'up')} data-testid="pw-mode">
         {mode === 'up' ? t('haveAccount') : t('newAccount')}
       </button>
+      {mode === 'in' && (
+        <button className="link" onClick={() => setMode('lost')} data-testid="forgot">
+          {t('forgot')}
+        </button>
+      )}
       <button className="secondary" onClick={() => act(() => chat.playAsGuest())} data-testid="guest">
         {t('guest')}
+      </button>
+      {error && <p className="blocked">{error}</p>}
+    </div>
+  );
+}
+
+/** Forgot the name or password: what you remember goes to customer service, who match it to your account. */
+function Recovery({
+  chat,
+  act,
+  error,
+  onBack,
+}: {
+  chat: ChatBackend;
+  act: (fn: () => Promise<unknown>) => Promise<void>;
+  error: string | null;
+  onBack: () => void;
+}) {
+  const [f, setF] = useState({
+    name: '',
+    id: '',
+    realm: '',
+    alliance: '',
+    attacker: '',
+    contact: '',
+    note: '',
+  });
+  const [sent, setSent] = useState(false);
+  const field = (k: keyof typeof f, label: string) => (
+    <input
+      value={f[k]}
+      onChange={(e) => setF({ ...f, [k]: e.target.value })}
+      placeholder={label}
+      maxLength={k === 'note' ? 500 : k === 'contact' ? 120 : 40}
+      data-testid={`rec-${k}`}
+    />
+  );
+  return (
+    <div className="sign-in" data-testid="recovery">
+      <h2>{t('forgot')}</h2>
+      {sent ? (
+        <p className="stat" data-testid="rec-sent">
+          {t('recoverySent')}
+        </p>
+      ) : (
+        <form
+          className="pw-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act(async () => {
+              await chat.requestRecovery({
+                name: f.name.trim(),
+                playerNo: /^\d+$/.test(f.id.trim()) ? Number(f.id.trim()) : null,
+                realm: Number(f.realm) || null,
+                alliance: f.alliance.trim(),
+                lastAttacker: f.attacker.trim(),
+                contact: f.contact.trim(),
+                note: f.note.trim(),
+              });
+              setSent(true);
+            });
+          }}
+        >
+          <p className="muted">{t('recoveryHow')}</p>
+          {field('name', t('recName'))}
+          {field('id', t('recId'))}
+          <select
+            value={f.realm}
+            onChange={(e) => setF({ ...f, realm: e.target.value })}
+            data-testid="rec-realm"
+          >
+            <option value="">{t('recRealm')}</option>
+            {REALMS.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name} (S{r.id})
+              </option>
+            ))}
+          </select>
+          {field('alliance', t('recAlliance'))}
+          {field('attacker', t('recAttacker'))}
+          {field('contact', t('recContact'))}
+          {field('note', t('recNote'))}
+          <button className="primary" type="submit" data-testid="rec-send">
+            {t('send')}
+          </button>
+        </form>
+      )}
+      <button className="link" onClick={onBack}>
+        {t('haveAccount')}
       </button>
       {error && <p className="blocked">{error}</p>}
     </div>

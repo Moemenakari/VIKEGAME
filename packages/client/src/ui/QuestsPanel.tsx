@@ -12,6 +12,7 @@ import type { GameStore } from '../game/store';
 import { formatAmount, formatDuration } from './format';
 import { goalText, questTitle, t } from './i18n';
 import { ChestIcon, ResourceIcon } from './icons';
+import { HelpTip } from './help';
 
 export function claimableQuests(state: GameState): number {
   const points = activityPoints(state);
@@ -111,6 +112,7 @@ export function QuestsPanel({
       <button className="close" onClick={onClose} aria-label={t('close')}>
         ×
       </button>
+      <HelpTip id="quests" state={state} />
       <div className="tabs" role="tablist">
         {(['daily', 'main'] as const).map((k) => (
           <button

@@ -120,17 +120,21 @@ function ProfileTabView({
 }) {
   const [name, setName] = useState(state.profile.name);
   const [social, setSocial] = useState<{ likes: number; roses: number; messages: number } | null>(null);
+  const [playerNo, setPlayerNo] = useState<number | null>(null);
   useEffect(() => {
     if (!online.on) return;
-    chatBackend()
-      .socialStats()
-      .then(setSocial, () => undefined);
+    const chat = chatBackend();
+    chat.socialStats().then(setSocial, () => undefined);
+    chat.connect().then(
+      (r) => setPlayerNo(r.me?.playerNo ?? null),
+      () => undefined,
+    );
   }, [online.on]);
   const power = totalPower(state);
   const army = troopPower(state);
   const heroes = heroPower(state);
   const realm = homeRealm(state);
-  const id = playerId(state, online.userId);
+  const id = playerNo ? String(playerNo) : playerId(state, online.userId);
   const stats: Array<[string, string, string]> = [
     ['⚔', t('power'), power.toLocaleString('en-US')],
     ['🏠', t('buildPower'), formatAmount(power - army - heroes)],
@@ -176,7 +180,7 @@ function ProfileTabView({
             ID {id} ⧉
           </button>
           <p className="muted">
-            🌍 #{realm.id} {realm.name} · 👑 {realm.king}
+            🌍 {realm.name} (S{realm.id}) · 👑 {realm.king}
             {online.allianceName ? ` · 🛡 ${online.allianceName}` : ''}
           </p>
         </div>

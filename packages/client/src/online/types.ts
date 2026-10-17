@@ -22,6 +22,19 @@ export interface ChatProfile {
   name: string;
   vip: number;
   vipPoints: number;
+  /** Public player ID (sign in with it instead of the name). */
+  playerNo?: number;
+}
+
+/** What a player who lost their account remembers, for customer service to match. */
+export interface RecoveryRequest {
+  name: string;
+  playerNo: number | null;
+  realm: number | null;
+  alliance: string;
+  lastAttacker: string;
+  contact: string;
+  note: string;
 }
 
 export type ChannelKind = 'realm' | 'clan' | 'group' | 'dm';
@@ -73,7 +86,10 @@ export interface ChatBackend {
   signInGoogle(): Promise<void>;
   /** Username + password account (the name becomes your chat name). */
   signUp(username: string, password: string): Promise<ChatProfile>;
-  signIn(username: string, password: string): Promise<ConnectResult>;
+  /** Sign in with the account name or the player ID. */
+  signIn(nameOrId: string, password: string): Promise<ConnectResult>;
+  /** Forgot the name or password: ask customer service (works signed out). */
+  requestRecovery(req: RecoveryRequest): Promise<void>;
   /** Play first, sign up later. */
   playAsGuest(): Promise<ConnectResult>;
   signOut(): Promise<void>;

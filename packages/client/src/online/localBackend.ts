@@ -6,6 +6,7 @@ import type {
   ConnectResult,
   FriendEntry,
   Reaction,
+  RecoveryRequest,
 } from './types';
 import { REALM_CHANNEL_ID, USERNAME_RE, allianceChannelId, canSendImage } from './types';
 
@@ -122,6 +123,11 @@ export class LocalBackend implements ChatBackend {
   }
 
   tickets: Array<{ topic: string; body: string }> = [];
+  recoveries: RecoveryRequest[] = [];
+
+  async requestRecovery(r: RecoveryRequest): Promise<void> {
+    this.recoveries.push(r);
+  }
 
   async socialStats() {
     const mine = this.log.filter((m) => m.senderId === this.me?.id);

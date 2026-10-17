@@ -29,6 +29,7 @@ import { formatAmount, formatDuration } from './format';
 import { t, troopName } from './i18n';
 import { NeedLink } from './NeedLink';
 import { ResourceIcon, TroopTypeIcon } from './icons';
+import { HelpTip } from './help';
 
 type Run = (cmd: Command, close?: boolean) => void;
 
@@ -257,6 +258,7 @@ export function ArmyPanel({
         ×
       </button>
       <h2>{t('warband')}</h2>
+      <HelpTip id="warband" state={state} />
       <p className="norse">Lið · {t('warriorsHome', { n: sumCounts(state.army.troops) })}</p>
       <TroopList counts={state.army.troops} empty={t('noWarriors')} />
       <HealSection state={state} now={now} run={run} />
@@ -305,6 +307,7 @@ export function BarrowPanel({
         ×
       </button>
       <h2>{t('barrow')}</h2>
+      <HelpTip id="barrow" state={state} />
       <p className="norse">Haugr · {t('barrowSub')}</p>
       <div className="levels">
         {DRAUGR_BANDS.map((b) => (
@@ -478,6 +481,7 @@ export function ReportsPanel({
         ×
       </button>
       <h2>{t('sagas')}</h2>
+      <HelpTip id="sagas" state={state} />
       {state.reports.length === 0 && <p className="muted">{t('noBattles')}</p>}
       <ul className="report-list">
         {state.reports.map((r) => (

@@ -11,6 +11,7 @@ import type { GameStore } from '../game/store';
 import { formatAmount } from './format';
 import { t } from './i18n';
 import { HeroPortrait, ResourceIcon, TroopTypeIcon } from './icons';
+import { HelpTip } from './help';
 
 /** What a skill does, in the player's language. */
 export function skillText(skill: HeroSkill): string {
@@ -100,6 +101,7 @@ export function HeroesPanel({
           </button>
         ))}
       </div>
+      <HelpTip key={tab} id={tab} state={state} />
 
       {tab === 'heroes' && !hero && (
         <>

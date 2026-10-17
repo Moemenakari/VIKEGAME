@@ -3,6 +3,8 @@ import {
   AVATARS,
   DAILY_CHESTS,
   MAIN_QUESTS,
+  ENDLESS_QUESTS,
+  mainQuestAt,
   apply,
   currentMainQuest,
   newGame,
@@ -74,5 +76,27 @@ describe('profile', () => {
     expect(bought.state.profile.avatar).toBe(3);
     s.resources.gold = 0;
     expect(run(s, { type: 'buyAvatar', avatar: 4 }).ok).toBe(false);
+  });
+});
+
+describe('the endless main line', () => {
+  it('never runs out: past the written quests it keeps asking for a bigger hall, buildings and warriors', () => {
+    const s = newGame(1, Date.UTC(2026, 9, 15));
+    s.mainQuest = MAIN_QUESTS.length;
+    const first = currentMainQuest(s);
+    expect(first.quest.goal).toEqual({
+      kind: 'building',
+      building: 'greatHall',
+      level: ENDLESS_QUESTS.hallBase,
+    });
+    s.mainQuest = MAIN_QUESTS.length + ENDLESS_QUESTS.rotation.length * 90;
+    const far = currentMainQuest(s);
+    expect(far.quest.goal).toEqual({
+      kind: 'building',
+      building: 'greatHall',
+      level: ENDLESS_QUESTS.hallBase + 90,
+    });
+    expect(far.quest.reward.gold).toBeGreaterThan(first.quest.reward.gold!);
+    expect(mainQuestAt(MAIN_QUESTS.length + ENDLESS_QUESTS.rotation.length - 1).goal.kind).toBe('troops');
   });
 });

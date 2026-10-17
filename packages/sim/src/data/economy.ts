@@ -16,6 +16,8 @@ export const ECONOMY = {
   >,
   /** Builder slots: 2 at start, +1 at Great Hall 5 and +1 at Great Hall 12 (GDD §4). */
   baseBuilders: 2,
+  /** No hold ever has more builders than this. */
+  maxBuilders: 10,
   extraBuilderAtHall: [5, 12],
   /** A new hold starts with these. */
   startingResources: { food: 1_500, timber: 1_500, iron: 0, silver: 150, gold: 100 } satisfies Resources,

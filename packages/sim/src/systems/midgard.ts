@@ -161,10 +161,34 @@ export function midgard(realmId: number): Midgard {
     if (!t || !land(t)) continue;
     const level = levelAt(map.size, t.x, t.y);
     const kinds = (Object.keys(CAMPS) as CampKind[]).filter(
-      (q) => level >= CAMPS[q].minLevel && level <= CAMPS[q].maxLevel,
+      (q) => q !== 'treasure' && level >= CAMPS[q].minLevel && level <= CAMPS[q].maxLevel,
     );
     const kind = kinds[nextInt(rng, 0, kinds.length - 1)] ?? 'wolves';
     camps.push(take({ id: `c${camps.length + 1}`, kind, level, x: t.x, y: t.y }));
+  }
+
+  // Shipwreck chests wash up on the shores (land tiles next to the sea).
+  const shore = map.tiles.filter((t) => {
+    if (!land(t)) return false;
+    return [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ].some(([dx, dy]) => map.tiles[(t.y + dy!) * map.size + (t.x + dx!)]?.kind === 'sea');
+  });
+  for (let k = 0; k < MIDGARD.treasures; k++) {
+    const t = pick(rng, shore);
+    if (!t || !land(t)) continue;
+    camps.push(
+      take({
+        id: `c${camps.length + 1}`,
+        kind: 'treasure',
+        level: levelAt(map.size, t.x, t.y),
+        x: t.x,
+        y: t.y,
+      }),
+    );
   }
 
   const at = new Map<string, MapJarl | MapCamp | MapNode>();
@@ -244,6 +268,74 @@ export function jarlDefenders(jarl: MapJarl): Combatant[] {
   return out;
 }
 
+/**
+ * Jarls' columns out on the roads (owner request: a moving army can be attacked). Every
+ * fourth jarl sends carts to a node or warriors to a camp, back and forth on a fixed beat.
+ */
+export interface MapColumn {
+  /** `t` + the jarl's id. */
+  id: string;
+  jarl: MapJarl;
+  toX: number;
+  toY: number;
+  period: number;
+  offset: number;
+  unit: 'cart' | 'riders' | 'siege' | 'troops';
+}
+
+const columnCache = new Map<number, MapColumn[]>();
+
+export function columns(realmId: number): MapColumn[] {
+  const hit = columnCache.get(realmId);
+  if (hit) return hit;
+  const w = midgard(realmId);
+  const out: MapColumn[] = [];
+  w.jarls.forEach((j, i) => {
+    if (i % 4) return;
+    const goal = i % 8 ? nearest(w.nodes, j.x + 0.1, j.y + 0.1) : nearest(w.camps, j.x + 0.1, j.y + 0.1);
+    if (!goal) return;
+    out.push({
+      id: `t${j.id}`,
+      jarl: j,
+      toX: goal.x,
+      toY: goal.y,
+      period: 90_000 + (i % 5) * 20_000,
+      offset: (i * 0.137) % 1,
+      unit: i % 8 ? 'cart' : i % 3 === 0 ? 'riders' : i % 3 === 1 ? 'siege' : 'troops',
+    });
+  });
+  columnCache.set(realmId, out);
+  return out;
+}
+
+/** Where a jarl's column is at `now` (0 at the hold, 1 at its goal) and which way it goes. */
+export function columnAt(c: MapColumn, now: number): { x: number; y: number; at: number; out: boolean } {
+  const f = (((now / c.period + c.offset) % 1) + 1) % 1;
+  const at = f < 0.5 ? f * 2 : 2 - f * 2;
+  return { x: c.jarl.x + (c.toX - c.jarl.x) * at, y: c.jarl.y + (c.toY - c.jarl.y) * at, at, out: f < 0.5 };
+}
+
+/** A column on the road: no palisade, and only part of the hold's warriors. */
+export function columnDefenders(c: MapColumn): Combatant[] {
+  return jarlDefenders(c.jarl)
+    .filter((d) => d.type !== 'wall')
+    .map((d) => ({ ...d, count: Math.max(1, Math.round(d.count * MIDGARD.columnShare)) }));
+}
+
+/** Where one of your columns is at `now`. */
+export function marchPos(state: GameState, m: March, now: number): { x: number; y: number } {
+  const home = state.world.home;
+  if (now >= m.doneAt) {
+    const f = Math.min(1, (now - m.doneAt) / Math.max(1, m.returnAt - m.doneAt));
+    return { x: m.x + (home.x - m.x) * f, y: m.y + (home.y - m.y) * f };
+  }
+  if (now >= m.arriveAt) return { x: m.x, y: m.y };
+  const from = m.from ?? home;
+  const outStart = m.startAt + (m.allies ? WARFARE.rallyWaitMs : 0);
+  const f = Math.max(0, (now - outStart) / Math.max(1, m.arriveAt - outStart));
+  return { x: from.x + (m.x - from.x) * f, y: from.y + (m.y - from.y) * f };
+}
+
 /** What one warrior band can carry home. */
 export function carryOf(troops: Record<string, number>): number {
   let n = 0;
@@ -259,6 +351,23 @@ export function marchLimit(state: GameState): number {
 export function travelMs(state: GameState, x: number, y: number, troops?: Record<string, number>): number {
   const d = Math.hypot(x - state.world.home.x, y - state.world.home.y);
   return Math.max(MIDGARD.minTravelMs, Math.round(d * msPerTile(troops)));
+}
+
+/**
+ * Share (0–1) of the straight road from your hold to (x, y) that runs over open sea.
+ * Those legs are sailed: the column boards longships at the shore and lands on the far side.
+ */
+export function seaShare(state: GameState, x: number, y: number): number {
+  const map = realmMap(state.world.realm);
+  const { x: hx, y: hy } = state.world.home;
+  const steps = Math.max(1, Math.ceil(Math.hypot(x - hx, y - hy) * 2));
+  let wet = 0;
+  for (let k = 1; k < steps; k++) {
+    const tx = Math.round(hx + ((x - hx) * k) / steps);
+    const ty = Math.round(hy + ((y - hy) * k) / steps);
+    if (map.tiles[ty * map.size + tx]?.kind === 'sea') wet++;
+  }
+  return steps > 1 ? wet / (steps - 1) : 0;
 }
 
 /** A column moves at the pace of its slowest troop type (riders fastest, siege engines slowest). */
@@ -327,21 +436,33 @@ export function takeTroops(
 }
 
 /** Validates and starts a march. Returns an error message, or null. */
-export function startMarch(
+/**
+ * What a march can go for: a jarl's hold, a ring fort, a jarl's column on the road, a camp or
+ * a node. A column is met where it will be when the march gets there.
+ */
+function marchTarget(
   state: GameState,
   kind: March['kind'],
   targetId: string,
-  troops: Record<string, number>,
   now: number,
-  events: GameEvent[],
-  rally = false,
-): string | null {
+  from: { x: number; y: number },
+  pace: number,
+): MapJarl | MapCamp | MapNode | string {
   const world = midgard(state.world.realm);
-  const target = [...world.jarls, ...forts(state.world.realm), ...world.camps, ...world.nodes].find(
-    (o) => o.id === targetId,
-  );
-  const isJarl = targetId.startsWith('j') || targetId.startsWith('f');
+  const isJarl = targetId.startsWith('j') || targetId.startsWith('f') || targetId.startsWith('t');
   const isCamp = targetId.startsWith('c');
+  let target: MapJarl | MapCamp | MapNode | undefined;
+  if (targetId.startsWith('t')) {
+    const c = columns(state.world.realm).find((q) => q.id === targetId);
+    if (c) {
+      let p = columnAt(c, now);
+      for (let k = 0; k < 2; k++) p = columnAt(c, now + Math.hypot(p.x - from.x, p.y - from.y) * pace);
+      target = { ...c.jarl, id: c.id, x: p.x, y: p.y };
+    }
+  } else
+    target = [...world.jarls, ...forts(state.world.realm), ...world.camps, ...world.nodes].find(
+      (o) => o.id === targetId,
+    );
   if (!target || (kind === 'attack') !== isJarl || (kind === 'hunt') !== isCamp)
     return 'Nothing to march on there';
   if (target.x === state.world.home.x && target.y === state.world.home.y) return 'Nothing to march on there';
@@ -352,7 +473,27 @@ export function startMarch(
   )
     return 'This jarl is in your alliance';
   if (isCleared(state, targetId, now))
-    return isJarl ? 'This hold is under a peace shield' : 'Nothing is left there for now';
+    return targetId.startsWith('t')
+      ? 'That column was broken; it is back at its hold'
+      : isJarl
+        ? 'This hold is under a peace shield'
+        : 'Nothing is left there for now';
+  return target;
+}
+
+export function startMarch(
+  state: GameState,
+  kind: March['kind'],
+  targetId: string,
+  troops: Record<string, number>,
+  now: number,
+  events: GameEvent[],
+  rally = false,
+): string | null {
+  const found = marchTarget(state, kind, targetId, now, state.world.home, msPerTile(troops));
+  if (typeof found === 'string') return found;
+  const target = found;
+  if (rally && targetId.startsWith('t')) return 'A rally cannot catch a column on the road';
   if (state.marches.some((m) => m.target === targetId)) return 'Your warriors are already on their way there';
   if (state.marches.length >= marchLimit(state)) return 'All your march columns are out';
   const stamina = kind === 'hunt' ? (STAMINA.cost[(target as MapCamp).kind] ?? 10) : 0;
@@ -399,7 +540,14 @@ export function recallMarch(state: GameState, id: number, now: number): string |
   if (!m) return 'No such march';
   if (now >= m.doneAt) return 'They are already on their way home';
   if (now < m.arriveAt) {
-    m.returnAt = now + (now - m.startAt);
+    const pos = marchPos(state, m, now);
+    const home = state.world.home;
+    m.returnAt =
+      m.from || m.allies
+        ? now + Math.round(Math.hypot(pos.x - home.x, pos.y - home.y) * msPerTile(m.troops))
+        : now + (now - m.startAt);
+    m.x = pos.x;
+    m.y = pos.y;
     m.arriveAt = m.doneAt = now;
     // 0: turned back before any battle.
     m.reportId = 0;
@@ -419,12 +567,58 @@ export function recallMarch(state: GameState, id: number, now: number): string |
   return null;
 }
 
+/**
+ * Turns a column on the road out towards a new target (owner request: steer your army
+ * while it marches). It sets off from where it stands now, at its own pace.
+ */
+export function redirectMarch(
+  state: GameState,
+  id: number,
+  targetId: string,
+  now: number,
+  events: GameEvent[],
+): string | null {
+  const m = state.marches.find((q) => q.id === id);
+  if (!m) return 'No such march';
+  if (m.kind === 'gather' || m.allies) return 'Gatherers and rallies keep their course';
+  // On the road out, or heading home after a fight: straight on to the next target.
+  const outbound = now < m.arriveAt && m.reportId === null;
+  const homeward = now >= m.doneAt && now < m.returnAt && sumCounts(m.troops) > 0;
+  if (!outbound && !homeward) return 'They are no longer on the road';
+  if (m.target === targetId) return 'Your warriors are already on their way there';
+  if (state.marches.some((q) => q.target === targetId)) return 'Your warriors are already on their way there';
+  const kind = targetId.startsWith('c') ? 'hunt' : 'attack';
+  const pos = marchPos(state, m, now);
+  const pace = msPerTile(m.troops);
+  const target = marchTarget(state, kind, targetId, now, pos, pace);
+  if (typeof target === 'string') return target;
+  const stamina = kind === 'hunt' ? (STAMINA.cost[(target as MapCamp).kind] ?? 10) : 0;
+  if (state.wallet.stamina < stamina) return 'Not enough stamina';
+  state.wallet.stamina -= stamina;
+  m.kind = kind;
+  m.target = targetId;
+  m.from = pos;
+  m.reportId = null;
+  m.x = target.x;
+  m.y = target.y;
+  m.startAt = now;
+  m.arriveAt = m.doneAt =
+    now + Math.max(MIDGARD.minRedirectMs, Math.round(Math.hypot(target.x - pos.x, target.y - pos.y) * pace));
+  m.returnAt = m.doneAt + travelMs(state, target.x, target.y, m.troops);
+  events.push({ type: 'march.started', kind, target: targetId });
+  return null;
+}
+
 /** A battle at the end of a march: survivors stay in the column, the fallen are wounded or dead. */
 function fightAt(state: GameState, m: March, events: GameEvent[]): void {
   const world = midgard(state.world.realm);
   const rng = createRng(state.rngState);
-  const jarl =
-    m.kind === 'attack'
+  const col = m.target.startsWith('t')
+    ? columns(state.world.realm).find((c) => c.id === m.target)
+    : undefined;
+  const jarl = col
+    ? col.jarl
+    : m.kind === 'attack'
       ? [...world.jarls, ...forts(state.world.realm)].find((j) => j.id === m.target)
       : undefined;
   const camp = m.kind === 'hunt' ? world.camps.find((c) => c.id === m.target) : undefined;
@@ -445,7 +639,7 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
       hp: t.hp,
     });
   }
-  const defenders = jarl ? jarlDefenders(jarl) : campDefenders(camp!);
+  const defenders = col ? columnDefenders(col) : jarl ? jarlDefenders(jarl) : campDefenders(camp!);
   const hm = heroMods(state, jarl ? 'conquest' : 'barrow');
   const outcome = resolveBattle(attackers, defenders, rng, { attacker: hm.ours, defender: hm.theirs });
   let room = Math.max(
@@ -489,14 +683,22 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
   if (won) {
     const level = jarl ? jarl.level : camp!.level;
     const base = jarl ? MIDGARD.jarlStores : CAMPS[camp!.kind].reward;
-    const share = jarl ? PVP.lootShare : 1;
+    const share = col ? MIDGARD.columnShare : jarl ? PVP.lootShare : 1;
     for (const [r, v] of Object.entries(base)) load[r as keyof Cost] = Math.floor(v * level * share);
     // Warriors carry home only what they can lift.
     const total = Object.values(load).reduce((a, b) => a + (b ?? 0), 0);
     const cap = carryOf(alive);
     if (total > cap && total > 0)
       for (const r of PRODUCED_RESOURCES) if (load[r]) load[r] = Math.floor(load[r]! * (cap / total));
-    state.world.cleared[m.target] = m.arriveAt + (jarl ? MIDGARD.jarlShieldMs : MIDGARD.campRespawnMs);
+    state.world.cleared[m.target] =
+      m.arriveAt +
+      (col
+        ? MIDGARD.campRespawnMs
+        : jarl
+          ? MIDGARD.jarlShieldMs
+          : camp?.kind === 'treasure'
+            ? MIDGARD.treasureRespawnMs
+            : MIDGARD.campRespawnMs);
     if (camp) {
       // Camps hide a little Gold, and hunting for an alliance earns alliance points.
       const gold = (EARN.campGold[camp.kind] ?? 0) + Math.floor(camp.level / 3);
@@ -505,6 +707,9 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
     }
     if (jarl && m.allies) state.wallet.alliance += EARN.alliancePerRallyLevel * jarl.level;
   }
+  // A column that fought before on this trip keeps what it already carries.
+  for (const [r, v] of Object.entries(m.load))
+    load[r as keyof Cost] = (load[r as keyof Cost] ?? 0) + (v ?? 0);
   m.load = load;
   const name = jarl ? jarl.name : CAMPS[camp!.kind].name;
   const tag = jarl && jarl.alliance !== null ? `[${ALLIANCES[jarl.alliance]!.tag}] ` : '';
@@ -513,7 +718,7 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
     at: m.arriveAt,
     kind: jarl ? 'jarl' : 'hunt',
     level: jarl ? jarl.level : camp!.level,
-    title: `${won ? 'Victory' : 'Defeat'} · ${tag}${name}`,
+    title: `${won ? 'Victory' : 'Defeat'} · ${tag}${name}${col ? ' (column)' : ''}`,
     won,
     rounds: outcome.rounds,
     attacker: lines,
@@ -525,19 +730,31 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
       dead: s.start - s.alive,
       wounded: 0,
     })),
-    saga: jarl
+    saga: col
       ? [
-          `Your warriors marched on the hold of ${name}.`,
+          `Your warriors caught the column of ${name} out on the road.`,
           won
-            ? 'The palisade fell and the defenders broke. Your warriors loaded what they could carry and turned for home.'
-            : 'The defenders held the gate, and your warriors fell back.',
+            ? 'They broke it and drove off with what its carts carried.'
+            : 'The column closed ranks and beat them off.',
         ]
-      : [
-          `Your warriors tracked the ${name.toLowerCase()} across the wilds.`,
-          won
-            ? 'The fight was hard but short, and the spoils are on their way home.'
-            : 'It was too strong for them, and they fell back.',
-        ],
+      : jarl
+        ? [
+            `Your warriors marched on the hold of ${name}.`,
+            won
+              ? 'The palisade fell and the defenders broke. Your warriors loaded what they could carry and turned for home.'
+              : 'The defenders held the gate, and your warriors fell back.',
+          ]
+        : camp!.kind === 'treasure'
+          ? [
+              'Your warriors found the wreck on the shore and pried open the sea chest.',
+              'They are hauling the silver home.',
+            ]
+          : [
+              `Your warriors tracked the ${name.toLowerCase()} across the wilds.`,
+              won
+                ? 'The fight was hard but short, and the spoils are on their way home.'
+                : 'It was too strong for them, and they fell back.',
+            ],
     reward: load,
     ...(won ? { items: drops } : {}),
     read: false,
@@ -669,7 +886,10 @@ export function scoutJarl(state: GameState, jarlId: string, now: number, events:
     rounds: 0,
     attacker: [],
     defender: [],
-    saga: [`Your scouts crept up to the hold of ${jarl.name} and counted what they saw.`],
+    saga: [
+      `Your scouts reached the hold of ${tag}${jarl.name} unseen.`,
+      'Below: the warriors guarding it, its wall, the stores you could take and its heroes. Compare them with your army before you attack.',
+    ],
     reward: {},
     scout: { troops, wall, stores, heroes: jarlHeroes(jarl), power: jarl.power },
     read: false,
@@ -677,6 +897,61 @@ export function scoutJarl(state: GameState, jarlId: string, now: number, events:
   state.reports = [report, ...state.reports].slice(0, MILITARY.maxReports);
   events.push({ type: 'scout.done', reportId: report.id });
   return null;
+}
+
+/** Marks or unmarks a foe (shown red on the map). */
+export function markFoe(state: GameState, id: string, on: boolean): void {
+  const foes = new Set(state.world.foes ?? []);
+  if (on) foes.add(id);
+  else foes.delete(id);
+  state.world.foes = [...foes];
+}
+
+/**
+ * Rival jarls spy on growing holds (owner request: being scouted shows in your mail).
+ * Every few hours one of the nearest rivals sends scouts; the report names them and
+ * they become your foe (red on the map).
+ */
+export function advanceSpies(state: GameState, now: number, events: GameEvent[]): void {
+  if (hallLevel(state) < MIDGARD.spyFromHall || state.world.origin) return;
+  if (state.world.spyAt === undefined) {
+    state.world.spyAt = now + MIDGARD.spyEveryMs;
+    return;
+  }
+  if (now < state.world.spyAt) return;
+  const rng = createRng(state.rngState);
+  const { x, y } = state.world.home;
+  const rivals = midgard(state.world.realm)
+    .jarls.filter((j) => j.alliance === null || j.alliance !== state.world.alliance)
+    .sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))
+    .slice(0, 6);
+  // Only one spy report per wait, however long you were away.
+  state.world.spyAt = now + Math.round(MIDGARD.spyEveryMs * (0.6 + nextInt(rng, 0, 80) / 100));
+  state.rngState = rng.state;
+  const jarl = rivals[nextInt(rng, 0, Math.max(0, rivals.length - 1))];
+  if (!jarl) return;
+  state.rngState = rng.state;
+  const tag = jarl.alliance !== null ? `[${ALLIANCES[jarl.alliance]!.tag}] ` : '';
+  const report: BattleReport = {
+    id: state.nextReportId++,
+    at: now,
+    kind: 'spied',
+    level: jarl.level,
+    title: `Spied on · ${tag}${jarl.name}`,
+    won: false,
+    rounds: 0,
+    attacker: [],
+    defender: [],
+    saga: [
+      `Your watchmen caught scouts of ${tag}${jarl.name} near your hold.`,
+      'They counted your warriors and your stores, then slipped away. Expect them; they are your foe now.',
+    ],
+    reward: {},
+    read: false,
+  };
+  state.reports = [report, ...state.reports].slice(0, MILITARY.maxReports);
+  markFoe(state, jarl.id, true);
+  events.push({ type: 'hold.spied', jarlId: jarl.id, reportId: report.id });
 }
 
 const fortCache = new Map<number, MapJarl[]>();

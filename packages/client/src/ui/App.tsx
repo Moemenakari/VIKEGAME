@@ -53,6 +53,7 @@ import { ProfilePage } from './ProfilePage';
 import { getPrefs, usePrefs } from './prefs';
 import { QuestsPanel, Reward, claimableQuests } from './QuestsPanel';
 import { ArmyPanel, BarrowPanel, ReportView, ReportsPanel } from './military';
+import { failTip } from './help';
 
 declare global {
   interface Window {
@@ -363,7 +364,17 @@ function Game({
     if (ok) setPlacing(null);
   };
 
-  const onError = (message: string) => setToast(errorText(message));
+  const [tip, setTip] = useState<string | null>(null);
+  const onError = (message: string) => {
+    setToast(errorText(message));
+    const next = failTip(message, lang, Date.now());
+    if (next) setTip(next);
+  };
+  useEffect(() => {
+    if (!tip) return;
+    const id = setTimeout(() => setTip(null), 9000);
+    return () => clearTimeout(id);
+  }, [tip]);
   const online = useOnline(store, onError, (name) => setToast(t('attackedBy', { n: name })));
   const playerAlliance = online.mine?.alliance
     ? online.alliances.find((x) => x.id === online.mine!.alliance!.id)
@@ -745,6 +756,15 @@ function Game({
         {toast && (
           <div className="toast" role="status">
             {toast}
+          </div>
+        )}
+
+        {tip && (
+          <div className="fail-tip card" role="status" data-testid="fail-tip">
+            <p>💡 {tip}</p>
+            <button className="link" onClick={() => setTip(null)}>
+              ✓
+            </button>
           </div>
         )}
 

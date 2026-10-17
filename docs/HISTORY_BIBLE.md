@@ -97,6 +97,15 @@ so do we. Every historical element in the game should trace back to a row here.
 | **Hacksilver** and weighed silver as money | Silver paying for scouts and the Energy shop |
 | Scouting before a raid (*njósn*, spying, in the sagas) | **Scout reports** |
 
+### Added with treasure, columns and spies (D-058–D-061)
+
+| Source | Used for |
+|---|---|
+| **Skuldelev ships** (scuttled in Roskilde Fjord, c. 1070) and the many wrecks along the Norse sea roads | **Shipwreck Chests** washed up on the shores (treasure on the map) |
+| **Strandhögg** and sea-borne raiding: men rowed and sailed to reach other coasts (Anglo-Saxon Chronicle; Heimskringla) | A road over water is **sailed by longship** (the column turns into a ship at sea) |
+| Ambushes on the road and at fords in the sagas (*Gísla saga*, *Egils saga*) | **Ambushing a jarl's column** on its way to hunt or gather |
+| Spies and watchmen (*njósnarmenn*, *varðmenn*) in the sagas | **Spied on** reports when a rival's scouts are caught near your hold |
+
 ## 3. Things we deliberately leave out
 - **Slavery** (thralls were real, but we leave them out).
 - Real religious sites as raid targets. Monsters and rivals are the enemies.

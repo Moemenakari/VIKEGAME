@@ -1,4 +1,4 @@
-import { DAILY_QUEST_POINTS, MAIN_QUESTS, type MainGoal } from '../data/mainQuests';
+import { DAILY_QUEST_POINTS, mainQuestAt, type MainGoal } from '../data/mainQuests';
 import type { GameState } from '../state';
 import { maxLevelOfType } from './economy';
 import { sumCounts } from './military';
@@ -15,10 +15,10 @@ export function mainGoalDone(state: GameState, goal: MainGoal): boolean {
   }
 }
 
-/** The current main quest and whether it can be claimed (null when the line is finished). */
+/** The current main quest and whether it can be claimed (the line never ends). */
 export function currentMainQuest(state: GameState) {
-  const quest = MAIN_QUESTS[state.mainQuest];
-  return quest ? { quest, done: mainGoalDone(state, quest.goal) } : null;
+  const quest = mainQuestAt(state.mainQuest);
+  return { quest, done: mainGoalDone(state, quest.goal) };
 }
 
 /** Activity points earned today by claiming daily quests. */

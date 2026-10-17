@@ -4,6 +4,7 @@ import { formatAmount } from './format';
 import { t } from './i18n';
 import { ResourceIcon } from './icons';
 import { itemName } from './ProfilePage';
+import { HelpTip } from './help';
 
 const TABS: ShopId[] = ['gold', 'alliance', 'vs', 'energy'];
 const TAB_ICON: Record<ShopId, string> = { gold: '🪙', alliance: '⚑', vs: '🏅', energy: '⚡' };
@@ -51,6 +52,7 @@ export function ShopPanel({
         ×
       </button>
       <h2>🏪 {t('shop')}</h2>
+      <HelpTip id="shop" state={state} />
       <div className="tabs" role="tablist">
         {TABS.map((k) => (
           <button

@@ -27,6 +27,11 @@ import {
   tileOwner,
   travelMs,
   tilesPerMinute,
+  seaShare,
+  columns,
+  columnDefenders,
+  marchPos,
+  type MapColumn,
   jarlProfile,
   HEROES,
   vsResult,
@@ -59,6 +64,7 @@ import { AvatarFace, ResourceIcon, TroopTypeIcon } from './icons';
 import { paintBase, paintTerritory } from './worldArt';
 import { WorldScene, type HoldView, type MarchView } from '../scene/world/WorldScene';
 import { loadQuality } from '../scene/quality';
+import { HelpTip } from './help';
 
 /**
  * Midgard: the world map of your realm (server). Alliances and their land, the Law
@@ -74,10 +80,13 @@ import { loadQuality } from '../scene/quality';
  */
 const ME = '#ffffff';
 const ALLY = '#3fa0ff';
-const NEUTRAL = '#f2c94c';
+const NEUTRAL = '#9aa0a6';
 const ENEMY = '#ff4a3d';
 
-const CAMP_GLYPH = { wolves: '🐺', bear: '🐻', outlaws: '🏕️', draugr: '💀' } as const;
+/** A realm (server) by its name first, its number second: "Uppsala (S1)". */
+const realmLabel = (id: number) => `${REALMS.find((r) => r.id === id)?.name ?? ''} (S${id})`;
+
+const CAMP_GLYPH = { wolves: '🐺', bear: '🐻', outlaws: '🏕️', draugr: '💀', treasure: '💰' } as const;
 const NODE_GLYPH = { farm: '🌾', wood: '🌲', iron: '⛏️', silver: '💰' } as const;
 const MARCH_COLOR = { gather: '#7fe08a', hunt: '#ffb347', attack: '#ff6b5a' } as const;
 
@@ -86,7 +95,9 @@ type Picked =
   | { kind: 'jarl'; jarl: MapJarl }
   | { kind: 'camp'; camp: MapCamp }
   | { kind: 'node'; node: MapNode }
-  | { kind: 'tile'; tile: Tile };
+  | { kind: 'tile'; tile: Tile }
+  | { kind: 'march'; id: number }
+  | { kind: 'column'; column: MapColumn };
 
 type Layer = 'castles' | 'wilds' | 'resourcesF';
 
@@ -169,9 +180,11 @@ export function WorldMap({
         : alliance !== null && alliance === vsRival
           ? ENEMY
           : NEUTRAL;
-  const jarlColor = relation;
+  /** Foes (they spied on or attacked you, or you marked them) are always red. */
+  const foes = new Set(state.world.foes ?? []);
+  const jarlColor = (j: MapJarl) => (foes.has(j.id) ? ENEMY : relation(j.alliance));
   const playerColor = (p: RealmPlayer) =>
-    enemyRealm
+    enemyRealm || foes.has(p.id)
       ? ENEMY
       : (p.alliance && p.alliance.id === myPlayerAlliance) ||
           (!p.alliance && p.aiAlliance !== null && p.aiAlliance === state.world.alliance)
@@ -326,7 +339,7 @@ export function WorldMap({
       for (const j of world.jarls) {
         if (!onScreen(j.x, j.y) || (mine && tileKey(j.x, j.y) === homeKey) || playerAt.has(tileKey(j.x, j.y)))
           continue;
-        const color = jarlColor(j.alliance);
+        const color = jarlColor(j);
         hold(j.x, j.y, color, '🏠');
         if (!far && mine && isCleared(state, j.id, now)) {
           ctx.beginPath();
@@ -396,10 +409,14 @@ export function WorldMap({
               ? picked.camp
               : picked.kind === 'node'
                 ? picked.node
-                : picked.tile;
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(ox + at.x * s, oy + at.y * s, s, s);
+                : picked.kind === 'tile'
+                  ? picked.tile
+                  : null;
+      if (at) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(ox + at.x * s, oy + at.y * s, s, s);
+      }
     }
   });
 
@@ -441,9 +458,39 @@ export function WorldMap({
     press.current = null;
     if (!p || p.moved) return;
     const rect = canvasRef.current!.getBoundingClientRect();
-    const x = Math.floor(view.x + (e.clientX - rect.left - rect.width / 2) / view.scale);
-    const y = Math.floor(view.y + (e.clientY - rect.top - rect.height / 2) / view.scale);
-    pick(x, y);
+    tap(
+      view.x + (e.clientX - rect.left - rect.width / 2) / view.scale,
+      view.y + (e.clientY - rect.top - rect.height / 2) / view.scale,
+    );
+  };
+  /** A tap on the map: a marching column first (yours to steer, a jarl's to ambush), else the tile. */
+  const tap = (fx: number, fy: number) => {
+    const near = marchViews(liveRef.current, store.now())
+      .map((v) => ({
+        v,
+        d: Math.hypot(
+          v.fromX + (v.toX - v.fromX) * v.at + 0.5 - fx,
+          v.fromY + (v.toY - v.fromY) * v.at + 0.5 - fy,
+        ),
+      }))
+      .filter((q) => q.d < 0.8 && !q.v.id.startsWith('s'))
+      .sort((a, b) => a.d - b.d)[0];
+    if (near && steer === null) {
+      setSheet(null);
+      if (near.v.id.startsWith('m')) return setPicked({ kind: 'march', id: Number(near.v.id.slice(1)) });
+      const column = columns(realmId).find((c) => c.id === near.v.id);
+      if (column) return setPicked({ kind: 'column', column });
+    }
+    if (near && steer !== null && near.v.id.startsWith('t')) return steerTo(near.v.id);
+    pick(Math.floor(fx), Math.floor(fy));
+  };
+  /** Steering a column: the next camp, hold or column tapped becomes its new target. */
+  const [steer, setSteer] = useState<number | null>(null);
+  const steerTo = (targetId: string) => {
+    const err = store.dispatch({ type: 'redirect', marchId: steer!, targetId });
+    setSteer(null);
+    if (err) onError(err.message);
+    else setPicked(null);
   };
   /** What stands on a tile: a player, a jarl, a camp, a node, or the land itself. */
   const pick = (x: number, y: number) => {
@@ -453,6 +500,11 @@ export function WorldMap({
     const tile = tileAt(map, x, y);
     setSheet(null);
     const fort = tile?.kind === 'fort' ? forts(realmId).find((f) => f.x === x && f.y === y) : undefined;
+    if (steer !== null) {
+      const goal = fort ?? (thing && !thing.id.startsWith('n') ? thing : undefined);
+      if (goal) return steerTo(goal.id);
+      setSteer(null);
+    }
     if (player) setPicked({ kind: 'player', player });
     else if (fort) setPicked({ kind: 'jarl', jarl: fort });
     else if (thing && !(mine && key === homeKey)) {
@@ -475,8 +527,8 @@ export function WorldMap({
   const stageRef = useRef<HTMLDivElement>(null);
   const scene3d = useRef<WorldScene | null>(null);
   const compassRef = useRef<HTMLSpanElement>(null);
-  const pickRef = useRef(pick);
-  pickRef.current = pick;
+  const pickRef = useRef(tap);
+  pickRef.current = tap;
   const liveRef = useRef({ state, realmId, traffic: [] as Traffic[] });
   useEffect(() => {
     const stage = stageRef.current;
@@ -555,7 +607,7 @@ export function WorldMap({
           x: j.x,
           y: j.y,
           kind: 'jarl',
-          color: jarlColor(j.alliance),
+          color: jarlColor(j),
           label: j.alliance === null ? j.name : `[${ALLIANCES[j.alliance]!.tag}] ${j.name}`,
           level: j.level,
           shield: mine && isCleared(state, j.id, now),
@@ -599,7 +651,9 @@ export function WorldMap({
               ? picked.camp
               : picked.kind === 'node'
                 ? picked.node
-                : picked.tile
+                : picked.kind === 'tile'
+                  ? picked.tile
+                  : null
         : null,
     });
   });
@@ -619,6 +673,8 @@ export function WorldMap({
   const war = kingsWar(now, state.world.realm);
   const vsResultNow = mine ? vsResult(state) : null;
   const targetName = (m: March) => {
+    const col = columns(realmId).find((q) => q.id === m.target);
+    if (col) return `${col.jarl.name} · ${t('column')}`;
     const o = [...world.jarls, ...forts(realmId)].find((q) => q.id === m.target);
     if (o) return o.name;
     const cp = world.camps.find((q) => q.id === m.target);
@@ -652,6 +708,9 @@ export function WorldMap({
         />
       )}
       <header className="world-top">
+        <div className="world-help">
+          <HelpTip id="world" state={state} auto={false} />
+        </div>
         <div className="realm-tabs" role="tablist">
           {REALMS.map((r) => (
             <button
@@ -665,7 +724,7 @@ export function WorldMap({
               }}
               data-testid={`realm-${r.id}`}
             >
-              #{r.id} {r.name}
+              {r.name} <small className="muted">S{r.id}</small>
               {r.id === state.world.realm && ' ★'}
             </button>
           ))}
@@ -716,7 +775,7 @@ export function WorldMap({
           <div className="war-banner" data-testid="war-banner">
             ⚔{' '}
             {t('inWarZone', {
-              n: state.world.realm,
+              n: realmLabel(state.world.realm),
               t: formatDuration(Math.max(0, state.world.origin.until - now)),
             })}
             <button
@@ -788,16 +847,8 @@ export function WorldMap({
 
       {mine && state.marches.length > 0 && !picked && !sheet && (
         <ul className="world-marches" data-testid="marches">
-          {state.marches.map((m) => {
+          {state.marches.map((m, i) => {
             const rallyEnds = m.allies ? m.startAt + WARFARE.rallyWaitMs : 0;
-            const phase =
-              now < rallyEnds
-                ? 'm_rally'
-                : now < m.arriveAt
-                  ? 'm_out'
-                  : now < m.doneAt && m.kind === 'gather'
-                    ? 'm_gathering'
-                    : 'm_back';
             const left =
               now < rallyEnds
                 ? rallyEnds - now
@@ -806,25 +857,22 @@ export function WorldMap({
                   : now < m.doneAt
                     ? m.doneAt - now
                     : m.returnAt - now;
+            const back = now >= m.doneAt;
             return (
               <li key={m.id}>
-                <button className="link" onClick={() => centre(m.x, m.y)}>
-                  {m.kind === 'gather' ? '🛒' : m.allies ? '⚑' : '⚔️'} {targetName(m)}
+                <button
+                  className={`march-chip ${back ? 'back' : ''}`}
+                  title={targetName(m)}
+                  data-testid={`march-${i + 1}`}
+                  onClick={() => {
+                    const p = marchPos(state, m, now);
+                    centre(Math.round(p.x), Math.round(p.y));
+                    setPicked({ kind: 'march', id: m.id });
+                  }}
+                >
+                  <b>{i + 1}</b> {m.kind === 'gather' ? '🛒' : m.allies ? '⚑' : back ? '↩' : '⚔️'}{' '}
+                  {formatDuration(Math.max(0, left))}
                 </button>
-                <span className="muted">
-                  {t(phase)} · {formatDuration(Math.max(0, left))}
-                </span>
-                {now < m.doneAt && (
-                  <button
-                    className="secondary small"
-                    onClick={() => {
-                      const err = store.dispatch({ type: 'recall', marchId: m.id });
-                      if (err) onError(err.message);
-                    }}
-                  >
-                    ↩ {t('recall')}
-                  </button>
-                )}
               </li>
             );
           })}
@@ -1094,8 +1142,7 @@ export function WorldMap({
           <h2>{t('events')}</h2>
           <h3>👑 {t('kingsWar')}</h3>
           <p className="stat">
-            #{state.world.realm} {REALMS.find((r) => r.id === state.world.realm)!.name} ⚔ #{war.opponent.id}{' '}
-            {war.opponent.name}
+            {realmLabel(state.world.realm)} ⚔ {realmLabel(war.opponent.id)}
           </p>
           <p className={war.live ? 'stat warn-text' : 'muted'}>
             {war.live
@@ -1105,11 +1152,12 @@ export function WorldMap({
           {online.on && (
             <div className="duel" data-testid="war-score">
               <span>
-                #{state.world.realm} <b>{formatAmount(online.warScores[state.world.realm] ?? 0)}</b>
+                {realmLabel(state.world.realm)}{' '}
+                <b>{formatAmount(online.warScores[state.world.realm] ?? 0)}</b>
               </span>
               <span>VS</span>
               <span>
-                <b>{formatAmount(online.warScores[war.opponent.id] ?? 0)}</b> #{war.opponent.id}
+                <b>{formatAmount(online.warScores[war.opponent.id] ?? 0)}</b> {realmLabel(war.opponent.id)}
               </span>
             </div>
           )}
@@ -1118,7 +1166,7 @@ export function WorldMap({
           {state.world.origin ? (
             <p className="stat">
               {t('inWarZone', {
-                n: state.world.realm,
+                n: realmLabel(state.world.realm),
                 t: formatDuration(Math.max(0, state.world.origin.until - now)),
               })}
             </p>
@@ -1127,10 +1175,13 @@ export function WorldMap({
               className="primary"
               data-testid="tp-war"
               onClick={() =>
-                move({ type: 'teleport', mode: 'war', buy: true }, t('movingWar', { n: zone.enemy.id }))
+                move(
+                  { type: 'teleport', mode: 'war', buy: true },
+                  t('movingWar', { n: realmLabel(zone.enemy.id) }),
+                )
               }
             >
-              🌀 {t('goWarZone', { n: zone.enemy.id })} · ×{state.items['teleport-war'] ?? 0}
+              🌀 {t('goWarZone', { n: realmLabel(zone.enemy.id) })} · ×{state.items['teleport-war'] ?? 0}
             </button>
           ) : (
             <p className="muted">{t('warZoneClosed')}</p>
@@ -1153,8 +1204,21 @@ export function WorldMap({
           onError={onError}
           onReport={onReport}
           onMove={move}
+          onSteer={(id) => {
+            setSteer(id);
+            setPicked(null);
+          }}
           onClose={() => setPicked(null)}
         />
+      )}
+
+      {steer !== null && (
+        <div className="war-banner steer-banner" data-testid="steer-banner">
+          🧭 {t('steerHint')}
+          <button className="secondary small" onClick={() => setSteer(null)}>
+            {t('cancel')}
+          </button>
+        </div>
       )}
 
       {clouds && (
@@ -1180,6 +1244,7 @@ function PickCard({
   onError,
   onReport,
   onMove,
+  onSteer,
   onClose,
 }: {
   picked: Picked;
@@ -1191,6 +1256,7 @@ function PickCard({
   onError: (m: string) => void;
   onReport: (id: number) => void;
   onMove: (cmd: Extract<Command, { type: 'teleport' }>, text: string) => void;
+  onSteer: (marchId: number) => void;
   onClose: () => void;
 }) {
   switch (picked.kind) {
@@ -1217,6 +1283,31 @@ function PickCard({
           onError={onError}
           onReport={onReport}
           onMove={onMove}
+          onClose={onClose}
+        />
+      );
+    case 'march':
+      return (
+        <MarchCard
+          store={store}
+          state={state}
+          id={picked.id}
+          now={now}
+          onError={onError}
+          onSteer={onSteer}
+          onClose={onClose}
+        />
+      );
+    case 'column':
+      return (
+        <ColumnCard
+          key={picked.column.id}
+          store={store}
+          state={state}
+          column={picked.column}
+          mine={mine}
+          now={now}
+          onError={onError}
           onClose={onClose}
         />
       );
@@ -1305,6 +1396,148 @@ function TroopPicker({
   );
 }
 
+/** One of your columns on the map: where it goes, and turn it back or steer it elsewhere. */
+function MarchCard({
+  store,
+  state,
+  id,
+  now,
+  onError,
+  onSteer,
+  onClose,
+}: {
+  store: GameStore;
+  state: GameState;
+  id: number;
+  now: number;
+  onError: (m: string) => void;
+  onSteer: (marchId: number) => void;
+  onClose: () => void;
+}) {
+  const m = state.marches.find((q) => q.id === id);
+  if (!m) return null;
+  const outbound = now < m.arriveAt && m.reportId === null;
+  const pos = marchPos(state, m, now);
+  const left = (outbound ? m.arriveAt : now < m.doneAt ? m.doneAt : m.returnAt) - now;
+  return (
+    <div className="card panel world-card" data-testid="march-card">
+      <button className="close" onClick={onClose} aria-label={t('close')}>
+        ×
+      </button>
+      <h2>
+        {m.kind === 'gather' ? '🛒' : '⚔️'} {t('yourColumn')}
+      </h2>
+      <p className="stat">
+        {t(outbound ? 'm_out' : now < m.doneAt ? 'm_gathering' : 'm_back')} ·{' '}
+        {formatDuration(Math.max(0, left))}
+      </p>
+      <p className="muted">
+        ⚡ {t('speedTiles', { n: tilesPerMinute(m.troops) })} · 🧭 {Math.round(pos.x)}, {Math.round(pos.y)}
+        {seaShare(state, m.x, m.y) > 0 && <> · ⛵</>}
+      </p>
+      <p className="stat">
+        {Object.entries(m.troops).map(([tid, n]) => (
+          <span key={tid} className="cost">
+            <TroopTypeIcon type={TROOPS[tid]!.type} size={14} /> {formatAmount(n)}
+          </span>
+        ))}
+      </p>
+      <div className="row">
+        {outbound && m.kind !== 'gather' && !m.allies && (
+          <button className="primary" data-testid="steer" onClick={() => onSteer(m.id)}>
+            🧭 {t('steer')}
+          </button>
+        )}
+        {now < m.doneAt && (
+          <button
+            className="secondary"
+            data-testid="recall-card"
+            onClick={() => {
+              const err = store.dispatch({ type: 'recall', marchId: m.id });
+              if (err) onError(err.message);
+              else onClose();
+            }}
+          >
+            ↩ {t('recall')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** A jarl's column out on the road: who it is, how strong, and an ambush. */
+function ColumnCard({
+  store,
+  state,
+  column,
+  mine,
+  now,
+  onError,
+  onClose,
+}: {
+  store: GameStore;
+  state: GameState;
+  column: MapColumn;
+  mine: boolean;
+  now: number;
+  onError: (m: string) => void;
+  onClose: () => void;
+}) {
+  const [sending, setSending] = useState(false);
+  const j = column.jarl;
+  const defenders = columnDefenders(column);
+  const ally = j.alliance !== null && j.alliance === state.world.alliance;
+  const busy = state.marches.some((m) => m.target === column.id);
+  return (
+    <div className="card panel world-card" data-testid="column-card">
+      <button className="close" onClick={onClose} aria-label={t('close')}>
+        ×
+      </button>
+      <h2>
+        {column.unit === 'cart' ? '🛒' : '⚔️'} {j.name} · {t('column')}
+      </h2>
+      <p className="norse">
+        {j.alliance === null
+          ? t('freeJarl')
+          : `[${ALLIANCES[j.alliance]!.tag}] ${ALLIANCES[j.alliance]!.name}`}{' '}
+        · {t('level', { n: j.level })}
+      </p>
+      <p className="muted">
+        {t('garrison')}:{' '}
+        {defenders.map((g) => (
+          <span key={g.key} className="cost">
+            <TroopTypeIcon type={g.type} size={14} /> {formatAmount(g.count)}
+          </span>
+        ))}
+      </p>
+      <p className="muted">{t('columnHow')}</p>
+      {mine &&
+        !ally &&
+        !busy &&
+        !isCleared(state, column.id, now) &&
+        (!sending ? (
+          <button className="primary" data-testid="ambush" onClick={() => setSending(true)}>
+            ⚔ {t('ambush')}
+          </button>
+        ) : (
+          <TroopPicker
+            state={state}
+            theirs={armyStrength(defenders)}
+            action={`⚔ ${t('march')}`}
+            testId="march-ambush"
+            onSend={(troops) => {
+              const err = store.dispatch({ type: 'intercept', columnId: column.id, troops });
+              if (err) onError(err.message);
+              else onClose();
+            }}
+          />
+        ))}
+      {ally && <p className="muted">{t('allyColumn')}</p>}
+    </div>
+  );
+}
+
 /** A jarl's hold, a camp or a node: what it is, and a march to it. */
 function MapTargetCard({
   picked,
@@ -1336,6 +1569,11 @@ function MapTargetCard({
       {t('marchTime', { t: formatDuration(travelMs(state, o.x, o.y, send)) })} · ⚡{' '}
       {t('speedTiles', { n: tilesPerMinute(send) })} ·{' '}
       {t('columns', { a: state.marches.length, b: marchLimit(state) })}
+      {seaShare(state, o.x, o.y) > 0 && (
+        <>
+          {' · '}⛵ {t('bySea', { p: Math.round(seaShare(state, o.x, o.y) * 100) })}
+        </>
+      )}
     </p>
   );
   const dispatch = (cmd: Parameters<GameStore['dispatch']>[0]) => {
@@ -1366,6 +1604,7 @@ function MapTargetCard({
       </div>
     );
     const prof = jarlProfile(j);
+    const foe = (state.world.foes ?? []).includes(j.id);
     head = (
       <>
         {head}
@@ -1385,17 +1624,32 @@ function MapTargetCard({
           <span>
             🏆 {t('j_wins')} <b>{formatAmount(prof.battlesWon)}</b>
           </span>
-          <span>⚡ {t('speedTiles', { n: prof.speed })}</span>
-          <span>👥 {formatAmount(prof.troopCount)}</span>
+          <span>
+            👥 {t('j_warriors')} <b>{formatAmount(prof.troopCount)}</b>
+          </span>
+          <span>
+            ⚡ {t('j_speed')} <b>{t('speedTiles', { n: prof.speed })}</b>
+          </span>
           {mine && (
             <span>
-              📏{' '}
-              {t('tilesAway', {
-                n: Math.round(Math.hypot(j.x - state.world.home.x, j.y - state.world.home.y)),
-              })}
+              📏 {t('j_distance')}{' '}
+              <b>
+                {t('tilesAway', {
+                  n: Math.round(Math.hypot(j.x - state.world.home.x, j.y - state.world.home.y)),
+                })}
+              </b>
             </span>
           )}
         </div>
+        {mine && !ally && (
+          <button
+            className={`link foe-toggle ${foe ? 'on' : ''}`}
+            data-testid="mark-foe"
+            onClick={() => store.dispatch({ type: 'markFoe', id: j.id, on: !foe })}
+          >
+            {foe ? `🟥 ${t('unmarkFoe')}` : `🎯 ${t('markFoe')}`}
+          </button>
+        )}
         <p className="muted">
           {prof.heroes
             .map((h) => `${HEROES.find((x) => x.id === h.id)?.name.split(',')[0]} ${h.level}`)
@@ -1478,11 +1732,13 @@ function MapTargetCard({
         </h2>
         <p className="muted">
           {t('garrison')}:{' '}
-          {defenders.map((g) => (
-            <span key={g.key} className="cost">
-              <TroopTypeIcon type={g.type} size={14} /> {g.count}
-            </span>
-          ))}
+          {defenders.length
+            ? defenders.map((g) => (
+                <span key={g.key} className="cost">
+                  <TroopTypeIcon type={g.type} size={14} /> {g.count}
+                </span>
+              ))
+            : t('unguarded')}
         </p>
         <p className="stat">
           {t('spoils')}:{' '}
@@ -1499,7 +1755,7 @@ function MapTargetCard({
     else if (mine && !march)
       body = !sending ? (
         <button className="primary" onClick={() => setSending('attack')} data-testid="hunt">
-          ⚔ {t('hunt')}
+          {cp.kind === 'treasure' ? `💰 ${t('collect')}` : `⚔ ${t('hunt')}`}
         </button>
       ) : (
         <TroopPicker
@@ -1983,6 +2239,7 @@ function PlayerCard({
 
 /** A column on the realm's roads (AI jarls going to hunt or gather), looping in time. */
 interface Traffic {
+  id: string;
   fromX: number;
   fromY: number;
   toX: number;
@@ -1995,24 +2252,18 @@ interface Traffic {
 
 /** The realm's traffic: some jarls out hunting or gathering, and longships at sea (seeded). */
 function realmTraffic(realmId: number): Traffic[] {
-  const w = midgard(realmId);
   const map = realmMap(realmId);
-  const out: Traffic[] = [];
-  w.jarls.forEach((j, i) => {
-    if (i % 4) return;
-    const goal = i % 8 ? nearest(w.nodes, j.x + 0.1, j.y + 0.1) : nearest(w.camps, j.x + 0.1, j.y + 0.1);
-    if (!goal) return;
-    out.push({
-      fromX: j.x,
-      fromY: j.y,
-      toX: goal.x,
-      toY: goal.y,
-      period: 90_000 + (i % 5) * 20_000,
-      offset: (i * 0.137) % 1,
-      unit: i % 8 ? 'cart' : i % 3 === 0 ? 'riders' : i % 3 === 1 ? 'siege' : 'troops',
-      alliance: j.alliance,
-    });
-  });
+  const out: Traffic[] = columns(realmId).map((c) => ({
+    id: c.id,
+    fromX: c.jarl.x,
+    fromY: c.jarl.y,
+    toX: c.toX,
+    toY: c.toY,
+    period: c.period,
+    offset: c.offset,
+    unit: c.unit,
+    alliance: c.jarl.alliance,
+  }));
   // Longships on the sounds: two sea tiles with open water between them.
   const sea = map.tiles.filter(
     (t) => t.kind === 'sea' && t.x > 2 && t.y > 2 && t.x < map.size - 3 && t.y < map.size - 3,
@@ -2034,6 +2285,7 @@ function realmTraffic(realmId: number): Traffic[] {
     );
     if (b)
       out.push({
+        id: `s${k}`,
         fromX: a.x,
         fromY: a.y,
         toX: b.x,
@@ -2069,8 +2321,8 @@ function marchViews(
       const siege = Object.keys(m.troops).some((id) => TROOPS[id]?.type === 'siege');
       out.push({
         id: `m${m.id}`,
-        fromX: state.world.home.x,
-        fromY: state.world.home.y,
+        fromX: phase === 'out' && m.from ? m.from.x : state.world.home.x,
+        fromY: phase === 'out' && m.from ? m.from.y : state.world.home.y,
         toX: m.x,
         toY: m.y,
         at: Math.max(0, Math.min(1, at)),
@@ -2082,11 +2334,14 @@ function marchViews(
     }
   }
   const myAlliance = state.world.alliance;
-  traffic.forEach((tr, i) => {
+  const foes = new Set(state.world.foes ?? []);
+  traffic.forEach((tr) => {
+    // A broken column stays home until it musters again.
+    if (realmId === state.world.realm && isCleared(state, tr.id, now)) return;
     const f = (now / tr.period + tr.offset) % 1;
     const outbound = f < 0.5;
     out.push({
-      id: `t${i}`,
+      id: tr.id,
       fromX: tr.fromX,
       fromY: tr.fromY,
       toX: tr.toX,
@@ -2094,7 +2349,12 @@ function marchViews(
       at: outbound ? f * 2 : 2 - f * 2,
       phase: outbound ? 'out' : 'back',
       unit: tr.unit,
-      color: tr.alliance !== null && tr.alliance === myAlliance ? ALLY : NEUTRAL,
+      color:
+        tr.alliance !== null && tr.alliance === myAlliance
+          ? ALLY
+          : foes.has(tr.id.slice(1))
+            ? ENEMY
+            : NEUTRAL,
       battle: tr.unit === 'troops' && Math.abs(f - 0.5) < 0.03,
     });
   });

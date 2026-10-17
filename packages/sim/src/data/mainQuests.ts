@@ -57,6 +57,50 @@ export const MAIN_QUESTS: readonly MainQuestDef[] = [
   b('bearDen', 1, { food: 5_000, gold: 30 }),
 ];
 
+/**
+ * After the written line ends the guide never goes quiet (owner request: the guide bar is
+ * always there, even at level 100): an endless round of goals. Cycle c asks for the
+ * Great Hall at level 8 + c, these buildings at level 6 + c, and more warriors.
+ */
+export const ENDLESS_QUESTS = {
+  rotation: [
+    'greatHall',
+    'farmstead',
+    'woodcutter',
+    'storehouse',
+    'shieldYard',
+    'palisade',
+    'bowyerRange',
+    'healersHouse',
+    'troops',
+  ] as const,
+  hallBase: 8,
+  buildingBase: 6,
+  troopsBase: 150,
+  troopsPerCycle: 100,
+  reward: { food: 5_000, timber: 5_000, silver: 200, gold: 10 } satisfies Cost,
+  /** Each cycle pays this much more. */
+  rewardGrowth: 0.5,
+};
+
+/** The main quest at index `i`: the written line first, then the endless round. */
+export function mainQuestAt(i: number): MainQuestDef {
+  const written = MAIN_QUESTS[i];
+  if (written) return written;
+  const k = i - MAIN_QUESTS.length;
+  const E = ENDLESS_QUESTS;
+  const cycle = Math.floor(k / E.rotation.length);
+  const what = E.rotation[k % E.rotation.length]!;
+  const reward: Cost = {};
+  for (const [r, v] of Object.entries(E.reward))
+    reward[r as keyof Cost] = Math.round(v * (1 + cycle * E.rewardGrowth));
+  if (what === 'troops') {
+    const count = E.troopsBase + cycle * E.troopsPerCycle;
+    return { id: `endless-troops-${count}`, goal: { kind: 'troops', count }, reward };
+  }
+  return b(what, (what === 'greatHall' ? E.hallBase : E.buildingBase) + cycle, reward);
+}
+
 /** Daily activity chests: claiming daily quests fills the bar (GDD §13, like the reference's chest track). */
 export const DAILY_CHESTS: ReadonlyArray<{ points: number; reward: Cost }> = [
   { points: 20, reward: { food: 500, timber: 500 } },

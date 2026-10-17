@@ -64,8 +64,15 @@ export function hallLevel(state: GameState): number {
 export function builderSlots(state: GameState): number {
   const hall = hallLevel(state);
   let lodges = 0;
-  for (const b of Object.values(state.buildings)) if (b.level > 0) lodges += BUILDINGS[b.type].builders ?? 0;
-  return ECONOMY.baseBuilders + ECONOMY.extraBuilderAtHall.filter((lvl) => hall >= lvl).length + lodges;
+  for (const b of Object.values(state.buildings)) {
+    const def = BUILDINGS[b.type];
+    if (b.level > 0 && def.builders)
+      lodges += def.builders * (1 + (def.builderEvery ? Math.floor((b.level - 1) / def.builderEvery) : 0));
+  }
+  return Math.min(
+    ECONOMY.maxBuilders,
+    ECONOMY.baseBuilders + ECONOMY.extraBuilderAtHall.filter((lvl) => hall >= lvl).length + lodges,
+  );
 }
 
 export function countOfType(state: GameState, type: BuildingType): number {

@@ -58,6 +58,8 @@ export interface BuildingDef {
   wall?: { hp: number; atk: number; growth: number };
   /** Extra builder slots once built. */
   builders?: number;
+  /** One more builder every this many levels (the lodge hires more as it grows). */
+  builderEvery?: number;
   /** Construction time saved per level (0.02 = 2 %). */
   buildSpeedPerLevel?: number;
   /** Production bonus per level from research (0.02 = 2 %). */
@@ -278,7 +280,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
     name: "Builders' Lodge",
     norse: 'Smiðir',
     description:
-      'Home of the master carpenters. Adds one builder and makes every construction a little faster.',
+      'Home of the master carpenters. Adds a builder, and one more every 4 levels, and makes every construction a little faster.',
     unlockHall: 3,
     maxCount: 1,
     baseCost: { timber: 600, food: 300 },
@@ -286,6 +288,7 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
     baseSeconds: 40,
     timeGrowth: 1.55,
     builders: 1,
+    builderEvery: 4,
     buildSpeedPerLevel: 0.02,
     power: 35,
   },
@@ -361,8 +364,9 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
     maxCount: 1,
     baseCost: { timber: 800, food: 800 },
     costGrowth: 1.5,
-    baseSeconds: 60,
-    timeGrowth: 1.55,
+    // Owner feedback: it felt slow for a building you need to join the alliance game.
+    baseSeconds: 30,
+    timeGrowth: 1.45,
     power: 40,
   },
   envoyHouse: {
