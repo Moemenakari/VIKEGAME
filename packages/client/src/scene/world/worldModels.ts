@@ -167,3 +167,105 @@ export function chestModel(): THREE.Mesh {
     ]);
   return kit.build('chest');
 }
+
+/** A small fenced field of barley rows next to a hold. */
+export function fieldModel(): THREE.Mesh {
+  const kit = new ModelBuilder();
+  kit.add(new THREE.BoxGeometry(4.4, 0.12, 3), paint('#6b5a3a', 'ground'), [0, 0.06, 0]);
+  for (let i = 0; i < 6; i++)
+    kit.add(new THREE.BoxGeometry(4, 0.35, 0.28), paint('#c9a94e', 'turf'), [0, 0.25, -1.2 + i * 0.48]);
+  const post = paint('#5a4030', 'timber');
+  for (const [x, z, w, d] of [
+    [0, -1.55, 4.6, 0.08],
+    [0, 1.55, 4.6, 0.08],
+    [-2.3, 0, 0.08, 3.1],
+    [2.3, 0, 0.08, 3.1],
+  ] as const)
+    kit.add(new THREE.BoxGeometry(w, 0.08, d), post, [x, 0.5, z]);
+  return kit.build('field');
+}
+
+/** Low bushes for open land (one InstancedMesh for the whole realm). */
+export function createBushes(
+  props: Array<{ x: number; y: number; z: number; scale: number; rotation: number }>,
+) {
+  const kit = new ModelBuilder();
+  kit.add(
+    new THREE.IcosahedronGeometry(0.7, 0),
+    paint('#3f5a34', 'turf'),
+    [0, 0.45, 0],
+    [0, 0, 0],
+    [1.2, 0.8, 1],
+  );
+  kit.add(
+    new THREE.IcosahedronGeometry(0.5, 0),
+    paint('#4d6a3c', 'turf'),
+    [0.6, 0.35, 0.2],
+    [0.4, 0, 0],
+    [1, 0.8, 1],
+  );
+  const model = kit.build('bush');
+  const mesh = new THREE.InstancedMesh(model.geometry, model.material, Math.max(1, props.length));
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  props.forEach((p, i) => {
+    q.setFromAxisAngle(up, p.rotation);
+    m.compose(new THREE.Vector3(p.x, p.y, p.z), q, new THREE.Vector3(p.scale, p.scale, p.scale));
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.count = props.length;
+  mesh.computeBoundingSphere();
+  return mesh;
+}
+
+/**
+ * Fine detail for the painted ground: a tiling grain (grass blades, snow crust, gravel)
+ * mixed in at two scales, so the land stays crisp when you zoom right in.
+ */
+export function addGroundDetail(material: THREE.MeshStandardMaterial, repeat: number): void {
+  const N = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = N;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(N, N);
+  // Periodic waves (whole numbers of cycles, so it tiles) plus a fine seeded grain.
+  let seed = 1234567;
+  const rand = () => (seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296;
+  const waves = Array.from({ length: 14 }, () => ({
+    fx: 1 + Math.floor(rand() * 9),
+    fy: 1 + Math.floor(rand() * 9),
+    ph: rand() * Math.PI * 2,
+    a: 0.3 + rand(),
+  }));
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      let v = 0;
+      for (const w of waves) v += Math.sin(((w.fx * x + w.fy * y) / N) * Math.PI * 2 + w.ph) * w.a;
+      v = 0.5 + v / 18 + (rand() - 0.5) * 0.35;
+      const c = Math.max(0, Math.min(255, v * 255));
+      const o = (y * N + x) * 4;
+      img.data[o] = img.data[o + 1] = img.data[o + 2] = c;
+      img.data[o + 3] = 255;
+    }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.detailMap = { value: tex };
+    shader.uniforms.detailRepeat = { value: repeat };
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform sampler2D detailMap;\nuniform float detailRepeat;',
+      )
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+        float dn = texture2D(detailMap, vMapUv * detailRepeat).r * 0.6
+          + texture2D(detailMap, vMapUv * detailRepeat * 3.7).r * 0.4;
+        diffuseColor.rgb *= 0.8 + dn * 0.4;`,
+      );
+  };
+}

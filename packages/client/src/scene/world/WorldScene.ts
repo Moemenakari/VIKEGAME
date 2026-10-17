@@ -2,6 +2,7 @@ import { createRng, hashString, nextRange, tileAt, type BuildingType, type Realm
 import * as THREE from 'three';
 import { createBarrow, createBuildingModel } from '../hold/buildingModels';
 import { createForest, createRocks } from '../hold/props';
+import { addGroundDetail, createBushes, fieldModel } from './worldModels';
 import { createLongship } from '../hold/longship';
 import type { QualitySettings } from '../quality';
 import {
@@ -120,6 +121,7 @@ export class WorldScene {
   private raf = 0;
   private last = 0;
   private time = 0;
+  private sun!: THREE.DirectionalLight;
   private readonly statics = new THREE.Group();
   private readonly dynamics = new THREE.Group();
   private readonly holdMeshes = new Map<string, THREE.InstancedMesh>();
@@ -162,7 +164,21 @@ export class WorldScene {
     this.scene.add(new THREE.HemisphereLight('#e6eef6', '#5d5446', 1.5));
     const sun = new THREE.DirectionalLight('#fff1d8', 2.2);
     sun.position.set(-300, 500, -200);
-    this.scene.add(sun);
+    this.scene.add(sun, sun.target);
+    this.sun = sun;
+    // Close up, halls and warriors cast real shadows (the shadow box follows the camera).
+    if (quality.shadowMapSize > 0) {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
+      const cam = sun.shadow.camera;
+      cam.left = cam.bottom = -90;
+      cam.right = cam.top = 90;
+      cam.near = 10;
+      cam.far = 900;
+      sun.shadow.bias = -0.0008;
+    }
     this.scene.add(this.statics, this.dynamics);
 
     const discMat = new THREE.MeshBasicMaterial({
@@ -196,6 +212,7 @@ export class WorldScene {
 
     const tint = (model: THREE.Mesh, n: number, name: string): Pool => {
       const mesh = instancedFrom(model, n, name);
+      mesh.castShadow = true;
       this.dynamics.add(mesh);
       return { mesh, used: 0 };
     };
@@ -285,8 +302,15 @@ export class WorldScene {
       this.statics.remove(child);
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
-        const m = child.material as THREE.MeshStandardMaterial;
-        m.map?.dispose();
+        // Only the realm's own pictures (ground, territory); shared surface materials stay.
+        const m = child.material as THREE.Material | THREE.Material[];
+        if (!Array.isArray(m) && m instanceof THREE.MeshBasicMaterial) m.map?.dispose();
+        if (
+          !Array.isArray(m) &&
+          m instanceof THREE.MeshStandardMaterial &&
+          m.map instanceof THREE.CanvasTexture
+        )
+          m.map.dispose();
       }
     }
     this.map = map;
@@ -295,10 +319,13 @@ export class WorldScene {
     const groundTex = new THREE.CanvasTexture(base);
     groundTex.colorSpace = THREE.SRGBColorSpace;
     groundTex.anisotropy = 4;
+    const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95 });
+    addGroundDetail(groundMat, map.size * 5);
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(W, W).rotateX(-Math.PI / 2).translate(W / 2, 0, W / 2),
-      new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95 }),
+      groundMat,
     );
+    ground.receiveShadow = true;
     this.statics.add(ground);
     const terrTex = new THREE.CanvasTexture(territory);
     terrTex.colorSpace = THREE.SRGBColorSpace;
@@ -310,7 +337,7 @@ export class WorldScene {
     // A dark sea all around, so the edge of the world never shows.
     const sea = new THREE.Mesh(
       new THREE.PlaneGeometry(W * 6, W * 6).rotateX(-Math.PI / 2).translate(W / 2, -0.2, W / 2),
-      new THREE.MeshBasicMaterial({ color: '#12345c', toneMapped: false }),
+      new THREE.MeshStandardMaterial({ color: '#12345c', roughness: 0.95 }),
     );
     this.statics.add(sea);
     // Trees on every forest tile, rocks on the hills (seeded: same every visit).
@@ -337,8 +364,40 @@ export class WorldScene {
             rotation: nextRange(rng, 0, 6.28),
           });
     }
-    if (trees.length) this.statics.add(createForest(trees));
-    if (rocks.length) this.statics.add(createRocks(rocks));
+    // Close-up detail: bushes and small stones scattered over open land, a few lone pines.
+    const bushes: typeof trees = [];
+    for (const t of map.tiles) {
+      if (t.kind !== 'field' && t.kind !== 'hills' && t.kind !== 'forest') continue;
+      for (let k = 0; k < 3; k++)
+        bushes.push({
+          x: (t.x + nextRange(rng, 0.05, 0.95)) * U,
+          y: 0,
+          z: (t.y + nextRange(rng, 0.05, 0.95)) * U,
+          scale: nextRange(rng, 0.5, 1),
+          rotation: nextRange(rng, 0, 6.28),
+        });
+      if (t.kind === 'field' && nextRange(rng, 0, 1) < 0.25)
+        trees.push({
+          x: (t.x + nextRange(rng, 0.1, 0.9)) * U,
+          y: 0,
+          z: (t.y + nextRange(rng, 0.1, 0.9)) * U,
+          scale: nextRange(rng, 0.45, 0.7),
+          rotation: nextRange(rng, 0, 6.28),
+        });
+      if (nextRange(rng, 0, 1) < 0.5)
+        rocks.push({
+          x: (t.x + nextRange(rng, 0.05, 0.95)) * U,
+          y: 0,
+          z: (t.y + nextRange(rng, 0.05, 0.95)) * U,
+          scale: nextRange(rng, 0.25, 0.5),
+          rotation: nextRange(rng, 0, 6.28),
+        });
+    }
+    for (const m of [createForest(trees), createRocks(rocks), createBushes(bushes)]) {
+      m.castShadow = true;
+      m.receiveShadow = true;
+      this.statics.add(m);
+    }
     this.holdKey = '';
   }
 
@@ -365,24 +424,40 @@ export class WorldScene {
     ) => {
       let mesh = this.holdMeshes.get(name);
       if (!mesh) {
-        mesh = instancedFrom(make(), 160, name);
+        mesh = instancedFrom(make(), 260, name);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         this.holdMeshes.set(name, mesh);
         this.dynamics.add(mesh);
       }
-      if (mesh.count >= 160) return;
+      if (mesh.count >= 260) return;
       place(mesh, mesh.count++, (x + 0.5) * U, lift, (y + 0.5) * U, rot, s);
     };
     const hall = (type: BuildingType, level: number) => () => createBuildingModel(type, level);
+    // Every hold is a little settlement (as in the genre's HQs): a palisade, houses and a field.
+    const settlement = (x: number, y: number, rot: number, walled: boolean) => {
+      const c = Math.cos(rot);
+      const sn = Math.sin(rot);
+      const at = (dx: number, dy: number) => [x + dx * c - dy * sn, y + dx * sn + dy * c] as const;
+      const [ax, ay] = at(0.32, 0.3);
+      put('house', hall('farmstead', 2), ax, ay, 0.38, rot + 0.4);
+      const [bx, by] = at(-0.34, 0.26);
+      put('store', hall('storehouse', 2), bx, by, 0.36, rot - 0.3);
+      const [fx, fy] = at(0.05, -0.36);
+      put('field', fieldModel, fx, fy, 1, rot);
+      if (walled) put('wall', hall('palisade', 6), x, y, 0.95, rot + 0.8);
+    };
     this.discs.count = this.rings.count = 0;
     for (const h of view.holds) {
       const rot = ((hashString(h.key) % 628) / 100) * 0.3 - 0.15 + 0.3;
       switch (h.kind) {
         case 'me':
-          put('hall-me', hall('greatHall', 15), h.x, h.y, 0.95, rot);
-          put('wall-me', hall('palisade', 8), h.x, h.y, 1.2, rot + 1.2);
+          put('hall-me', hall('greatHall', 15), h.x, h.y, 0.85, rot);
+          settlement(h.x, h.y, rot, true);
           break;
         case 'player':
-          put('hall-player', hall('greatHall', 10), h.x, h.y, 0.85, rot);
+          put('hall-player', hall('greatHall', 10), h.x, h.y, 0.75, rot);
+          settlement(h.x, h.y, rot, true);
           break;
         case 'jarl':
           put(
@@ -390,9 +465,10 @@ export class WorldScene {
             hall('greatHall', h.level >= 10 ? 8 : 3),
             h.x,
             h.y,
-            0.5,
+            h.level >= 10 ? 0.72 : 0.62,
             rot,
           );
+          settlement(h.x, h.y, rot, h.level >= 8);
           break;
         case 'fort':
           put('fort-wall', hall('rampart', 10), h.x, h.y, 1.05, rot);
@@ -491,13 +567,11 @@ export class WorldScene {
   }
 
   private clamp(): void {
-    this.distance = Math.min(this.maxDistance(), Math.max(32, this.distance));
-    // Keep the view over the realm, so the edge of the world stays out of sight.
+    this.distance = Math.min(this.maxDistance(), Math.max(14, this.distance));
+    // The view stays over the realm (the sea beyond its edge matches the painted sea).
     const W = this.size * U;
-    const mx = Math.min(W / 2, this.distance * 0.12);
-    const my = Math.min(W / 2, this.distance * 0.28);
-    this.target.x = Math.min(W - mx, Math.max(mx, this.target.x));
-    this.target.y = Math.min(W - mx, Math.max(my, this.target.y));
+    this.target.x = Math.min(W, Math.max(0, this.target.x));
+    this.target.y = Math.min(W, Math.max(0, this.target.y));
   }
 
   private resize(): void {
@@ -513,7 +587,7 @@ export class WorldScene {
   private updateCamera(): void {
     // Tilted more when close (to see the halls), straight down when the realm is in view.
     const far = THREE.MathUtils.clamp(this.distance / this.maxDistance(), 0, 1);
-    const pitch = THREE.MathUtils.lerp(1.05, 1.45, far);
+    const pitch = THREE.MathUtils.lerp(0.78, 1.45, Math.sqrt(far));
     this.camera.position.set(
       this.target.x,
       Math.sin(pitch) * this.distance,
@@ -587,6 +661,9 @@ export class WorldScene {
     this.last = now;
     this.time += dt;
     this.updateCamera();
+    this.sun.position.set(this.target.x - 120, 260, this.target.y - 80);
+    this.sun.target.position.set(this.target.x, 0, this.target.y);
+    this.sun.castShadow = this.distance < 260 && this.renderer.shadowMap.enabled;
     // Haze only beyond what you are looking at, so the realm never looks washed out.
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.distance * 1.4;
