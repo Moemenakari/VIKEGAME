@@ -117,8 +117,22 @@ test('raise a Shield Yard, train warriors and clear the first draugr barrow', as
   await page.screenshot({ path: 'test-results/barrow.png' });
   await page.getByTestId('attack').click();
   await expect(page.getByTestId('report')).toContainText('Victory');
+  // The win shows its spoils in the 3D burst.
+  await expect(page.getByTestId('reward-burst')).toBeVisible();
   await page.screenshot({ path: 'test-results/report.png' });
   expect((await state()).pve.draugrCleared).toBe(1);
+
+  // On the map: find the nearest wolf pack and send the survivors to hunt it.
+  await page.getByLabel('Close').click();
+  await page.getByTestId('globe').click();
+  await page.getByTestId('find-button').click();
+  await page.getByTestId('find-wolves').click();
+  await expect(page.getByTestId('target-card')).toContainText('Wolf Pack');
+  await page.getByTestId('hunt').click();
+  await page.getByTestId('march-hunt').click();
+  await expect(page.getByTestId('marches')).toBeVisible();
+  expect((await state()).marches).toHaveLength(1);
+  await page.screenshot({ path: 'test-results/march.png' });
 
   expect(errors).toEqual([]);
 });
@@ -224,9 +238,31 @@ test('the globe opens Midgard: realms, alliances, the King and the wars', async 
   await page.getByTestId('join-VAR').click();
   expect(await page.evaluate(() => window.__jarlheim!.state().world.alliance)).toBe(2);
   await page.screenshot({ path: 'test-results/alliances.png' });
+  await page.getByLabel('Close').click();
   await page.getByTestId('events-button').click();
   await expect(page.getByTestId('events')).toContainText("King's War");
   await page.screenshot({ path: 'test-results/events.png' });
+  await page.getByLabel('Close').click();
+  // Your alliance-mates' holds, the VS (1 v 2, 3 v 4…) and the top jarls.
+  await page.getByTestId('alliances-button').click();
+  await expect(page.getByTestId('members').locator('li').first()).toBeVisible();
+  await page.screenshot({ path: 'test-results/members.png' });
+  await page.getByLabel('Close').click();
+  await page.getByTestId('vs-button').click();
+  await expect(page.getByTestId('vs-match')).toContainText('VS');
+  await expect(page.getByTestId('vs-players').locator('li')).toHaveCount(10);
+  await page.screenshot({ path: 'test-results/vs.png' });
+  await page.getByLabel('Close').click();
+  // Every jarl's hold is on the map, and zoomed out the whole realm fits.
+  expect(Number(await page.getByTestId('world-map').getAttribute('data-jarls'))).toBeGreaterThan(50);
+  await page.getByTestId('zoom-all').click();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: 'test-results/world-all.png' });
+  await page.getByTestId('find-button').click();
+  await page.getByTestId('find-farm').click();
+  await expect(page.getByTestId('target-card')).toContainText('Barley Fields');
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: 'test-results/world-near.png' });
   await page.getByLabel('Close').click();
   await page.getByTestId('realm-2').click();
   await page.waitForTimeout(200);
@@ -251,6 +287,8 @@ test('sign up with a username, chat in the realm, gift a rose and message a frie
   await page.getByTestId('pw-submit').click();
 
   await expect(page.getByTestId('conversation')).toContainText('Hail, settlers');
+  // The AI jarls talk in the realm chat too, always marked as AI.
+  await expect(page.locator('.ai-tag').first()).toBeVisible();
   await page.getByTestId('chat-input').fill('Hail from the north!');
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('conversation')).toContainText('Hail from the north!');

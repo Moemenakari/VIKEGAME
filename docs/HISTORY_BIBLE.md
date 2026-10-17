@@ -75,6 +75,18 @@ so do we. Every historical element in the game should trace back to a row here.
 | *Sendiboði* (messenger, envoy) | **Envoys' House** |
 | **Eiríkr the Victorious** (Adam of Bremen), **Haraldr Bluetooth** (Jelling stones), **Hákon Jarl** (Heimskringla), **Óláfr Cuarán** (Irish annals) | AI kings of realms 1–4 until players win the Thing |
 
+### Added with the living world map (D-048–D-050)
+
+| Source | Used for |
+|---|---|
+| **Orkneyinga saga** (Jarls of Orkney), **Anglo-Saxon Chronicle 867–954** (Kings of Jórvík), **Dudo of Saint-Quentin** and the treaty of 911 (Northmen of Rouen), **Gutasaga** and the Gotland picture stones (Gutar) | The four new saga alliances (ten in all) |
+| Old Norse personal names attested on **runestones (Rundata)** and in **Landnámabók** (Ásbjǫrn, Ketill, Gunnhildr, Þórunn…) with plain bynames (the White, Flatnose…) | Names of the AI jarls on the map. Names only, no real person |
+| Grey wolves (Old Norse *úlfr*, *vargr*) of Viking-Age Scandinavia | **Wolf Pack** camps |
+| Brown bears; ***Auðunar þáttr vestfirzka*** (a bear brought as a gift for a king) | **Brown Bear** camps |
+| **Grágás** (*skóggangr*, full outlawry); ***Gísla saga***, ***Grettis saga*** (outlaws living in the wilds) | **Outlaw Camps** |
+| ***Grettis saga*** (Glámr), ***Eyrbyggja saga*** (the restless dead) | **Draugr Mounds** |
+| Bog-iron working; the **Spillings** (Gotland) and **Cuerdale** (England) silver hoards; Skuldelev oak | Gathering nodes: Bog-iron Marsh, Buried Hoard, Old Oak Wood, Barley Fields |
+
 ## 3. Things we deliberately leave out
 - **Slavery** (thralls were real, but we leave them out).
 - Real religious sites as raid targets. Monsters and rivals are the enemies.

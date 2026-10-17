@@ -55,7 +55,7 @@ export interface ReportLine {
 export interface BattleReport {
   id: number;
   at: number;
-  kind: 'draugr' | 'raid' | 'conquest' | 'pvp';
+  kind: 'draugr' | 'raid' | 'conquest' | 'pvp' | 'hunt' | 'jarl';
   /** Barrow level, or the raid number. */
   level: number;
   title: string;
@@ -68,7 +68,40 @@ export interface BattleReport {
   reward: Cost;
   /** Resources the raiders carried off (raids you lost). */
   loot?: Cost;
+  /** Items dropped into the Bag. */
+  items?: Record<string, number>;
   read: boolean;
+}
+
+/** Warriors out on the Midgard map: gathering, hunting a camp or attacking a jarl's hold. */
+export interface March {
+  id: number;
+  kind: 'gather' | 'hunt' | 'attack';
+  /** Id of the node, camp or jarl (see systems/midgard.ts). */
+  target: string;
+  x: number;
+  y: number;
+  troops: Record<string, number>;
+  startAt: number;
+  /** Reaches the target. */
+  arriveAt: number;
+  /** Done there (gathered, or the battle fought) and heading home. */
+  doneAt: number;
+  /** Back at the hold. */
+  returnAt: number;
+  /** What they carry home. */
+  load: Cost;
+  /** The battle report, once fought. */
+  reportId: number | null;
+}
+
+/** The Alliance VS (owner request): 3-day seasons, points from your deeds. */
+export interface VsState {
+  season: number;
+  points: number;
+  /** The season before, kept until its reward is claimed. */
+  last: { season: number; points: number; alliance: number | null } | null;
+  claimed: number;
 }
 
 /** A raiding fleet on its way (spotted by the beacon). */
@@ -149,7 +182,12 @@ export interface GameState {
     owned: string[];
     /** Index into ALLIANCES, or null. */
     alliance: number | null;
+    /** Map objects that are gone for now (beaten camps, shielded jarls, gathered nodes): id → until. */
+    cleared: Record<string, number>;
   };
+  marches: March[];
+  nextMarchId: number;
+  vs: VsState;
   /** Heroes you have recruited, the squad of three that leads your warriors, and Saga Horns. */
   heroes: {
     owned: Record<string, { level: number; stars: number; dupes: number }>;
@@ -163,7 +201,7 @@ export interface GameState {
   stats: { kills: number; battlesWon: number; battlesLost: number; raidsBeaten: number; landTaken: number };
 }
 
-export const STATE_VERSION = 7;
+export const STATE_VERSION = 8;
 
 export const dayIndex = (now: number): number => Math.floor(now / 86_400_000);
 
@@ -188,7 +226,13 @@ export function newGame(seed: number, now: number): GameState {
     ...freshWorld(),
     heroes: freshHeroes(),
     ...freshBag(),
+    ...freshMarches(),
   };
+}
+
+/** Fields added in save version 8: marches on the map and the Alliance VS. */
+export function freshMarches(): Pick<GameState, 'marches' | 'nextMarchId' | 'vs'> {
+  return { marches: [], nextMarchId: 1, vs: { season: -1, points: 0, last: null, claimed: -1 } };
 }
 
 /** Fields added in save version 7: the Bag and the profile's deeds. */
@@ -201,7 +245,7 @@ export function freshBag(): Pick<GameState, 'items' | 'stats'> {
 
 /** Fields added in save version 5: the world map. Realm 1 until accounts choose one. */
 export function freshWorld(realm = 1): Pick<GameState, 'world'> {
-  return { world: { realm, home: realmMap(realm).home, owned: [], alliance: null } };
+  return { world: { realm, home: realmMap(realm).home, owned: [], alliance: null, cleared: {} } };
 }
 
 /** Where the old fixed plots were: used for the starting buildings and to upgrade old saves. */

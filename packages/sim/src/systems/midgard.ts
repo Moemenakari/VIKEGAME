@@ -1,0 +1,503 @@
+import { ALLIANCES, REALMS } from '../data/world';
+import { BYNAMES, CAMPS, JARL_NAMES, MIDGARD, NODES, type CampKind, type NodeKind } from '../data/midgard';
+import { AVATARS } from '../data/mainQuests';
+import { BUILDINGS } from '../data/buildings';
+import { MILITARY, TROOPS } from '../data/troops';
+import { PRODUCED_RESOURCES, type Cost } from '../data/resources';
+import type { GameEvent } from '../events';
+import { createRng, hashString, nextInt, type Rng } from '../rng';
+import type { BattleReport, GameState, March, ReportLine } from '../state';
+import { resolveBattle, type Combatant } from './combat';
+import { heroMods } from './heroes';
+import { killsOf, recordBattle } from './items';
+import { addCounts, armyStrength, sumCounts, woundedCapacity } from './military';
+import { hallLevel } from './economy';
+import { PVP } from './pvp';
+import { realmMap, tileKey, type Tile } from './world';
+
+/**
+ * Midgard's people and wilds: AI jarls' holds, camps to hunt and nodes to gather,
+ * all generated from the realm id (pure, cached), plus the marches that go to them.
+ * Warriors walk there and back; battles are fought when they arrive.
+ */
+export interface MapJarl {
+  id: string;
+  name: string;
+  /** Index into ALLIANCES, or null. */
+  alliance: number | null;
+  x: number;
+  y: number;
+  /** Great Hall level, 1–20. */
+  level: number;
+  power: number;
+  avatar: number;
+}
+
+export interface MapCamp {
+  id: string;
+  kind: CampKind;
+  level: number;
+  x: number;
+  y: number;
+}
+
+export interface MapNode {
+  id: string;
+  kind: NodeKind;
+  level: number;
+  x: number;
+  y: number;
+}
+
+export interface Midgard {
+  jarls: MapJarl[];
+  camps: MapCamp[];
+  nodes: MapNode[];
+  /** "x,y" → what stands there. */
+  at: Map<string, MapJarl | MapCamp | MapNode>;
+}
+
+const cache = new Map<number, Midgard>();
+
+const levelAt = (size: number, x: number, y: number) => {
+  const c = (size - 1) / 2;
+  return Math.max(1, Math.min(10, 1 + Math.floor((1 - Math.hypot(x - c, y - c) / c) * 10)));
+};
+
+function pick<T>(rng: Rng, list: T[]): T | undefined {
+  if (!list.length) return undefined;
+  const i = nextInt(rng, 0, list.length - 1);
+  const [item] = list.splice(i, 1);
+  return item;
+}
+
+/** Everyone and everything on a realm's map. Pure and deterministic from the realm id. */
+export function midgard(realmId: number): Midgard {
+  const hit = cache.get(realmId);
+  if (hit) return hit;
+  const map = realmMap(realmId);
+  const rng = createRng(hashString(`midgard-pop-${realmId}`));
+  const c = (map.size - 1) / 2;
+  // The newcomer's tile and the land around it stay clear, so a new hold has room to grow.
+  const taken = new Set<string>();
+  for (let dx = -1; dx <= 1; dx++)
+    for (let dy = -1; dy <= 1; dy++) taken.add(tileKey(map.home.x + dx, map.home.y + dy));
+  const land = (t: Tile) =>
+    (t.kind === 'field' || t.kind === 'forest' || t.kind === 'hills') && !taken.has(tileKey(t.x, t.y));
+  const take = <T extends { x: number; y: number }>(o: T) => {
+    taken.add(tileKey(o.x, o.y));
+    return o;
+  };
+  const jarlPower = (level: number) =>
+    Math.round(jarlStrengthOf(level) * 9 + level * 1_800 + nextInt(rng, 0, 900));
+
+  const jarls: MapJarl[] = [];
+  const newJarl = (t: Tile, alliance: number | null, level: number) => {
+    const n = jarls.length + 1;
+    const name = `${JARL_NAMES[nextInt(rng, 0, JARL_NAMES.length - 1)]} ${BYNAMES[nextInt(rng, 0, BYNAMES.length - 1)]}`;
+    jarls.push(
+      take({
+        id: `j${n}`,
+        name,
+        alliance,
+        x: t.x,
+        y: t.y,
+        level,
+        power: jarlPower(level),
+        avatar: nextInt(rng, 0, AVATARS.length - 1),
+      }),
+    );
+  };
+  // Each alliance's jarls live on its land; stronger alliances (nearer the Law Rock) have stronger jarls.
+  ALLIANCES.forEach((_, a) => {
+    let home = map.tiles.filter((t) => t.owner === a && land(t));
+    // An alliance squeezed onto a rocky shore settles the free land nearest its fort.
+    if (home.length < MIDGARD.jarlsPerAlliance) {
+      const seat = map.seats.find((q) => q.alliance === a)!;
+      home = home.concat(
+        map.tiles
+          .filter((t) => t.owner === null && land(t))
+          .sort((p, q) => Math.hypot(p.x - seat.x, p.y - seat.y) - Math.hypot(q.x - seat.x, q.y - seat.y))
+          .slice(0, MIDGARD.jarlsPerAlliance * 2),
+      );
+    }
+    for (let k = 0; k < MIDGARD.jarlsPerAlliance; k++) {
+      const t = pick(rng, home);
+      if (!t) break;
+      const near = 1 - Math.hypot(t.x - c, t.y - c) / c;
+      newJarl(t, a, Math.max(1, Math.min(20, Math.round(4 + near * 12 + nextInt(rng, -2, 3)))));
+    }
+  });
+  const rim = map.tiles.filter((t) => t.owner === null && land(t) && Math.hypot(t.x - c, t.y - c) > 9);
+  for (let k = 0; k < MIDGARD.freeJarls; k++) {
+    const t = pick(rng, rim);
+    if (t && land(t)) newJarl(t, null, nextInt(rng, 1, 8));
+  }
+
+  const nodes: MapNode[] = [];
+  const kindTile: Record<NodeKind, Tile['kind'][]> = {
+    farm: ['field'],
+    wood: ['forest'],
+    iron: ['hills'],
+    silver: ['field', 'forest', 'hills'],
+  };
+  for (const kind of Object.keys(MIDGARD.nodes) as NodeKind[]) {
+    const spots = map.tiles.filter((t) => kindTile[kind].includes(t.kind) && land(t));
+    for (let k = 0; k < MIDGARD.nodes[kind]; k++) {
+      const t = pick(rng, spots);
+      if (!t || !land(t)) continue;
+      nodes.push(
+        take({ id: `n${nodes.length + 1}`, kind, level: levelAt(map.size, t.x, t.y), x: t.x, y: t.y }),
+      );
+    }
+  }
+
+  const camps: MapCamp[] = [];
+  const wild = map.tiles.filter((t) => land(t) && Math.hypot(t.x - c, t.y - c) > 3);
+  for (let k = 0; k < MIDGARD.camps; k++) {
+    const t = pick(rng, wild);
+    if (!t || !land(t)) continue;
+    const level = levelAt(map.size, t.x, t.y);
+    const kinds = (Object.keys(CAMPS) as CampKind[]).filter(
+      (q) => level >= CAMPS[q].minLevel && level <= CAMPS[q].maxLevel,
+    );
+    const kind = kinds[nextInt(rng, 0, kinds.length - 1)] ?? 'wolves';
+    camps.push(take({ id: `c${camps.length + 1}`, kind, level, x: t.x, y: t.y }));
+  }
+
+  const at = new Map<string, MapJarl | MapCamp | MapNode>();
+  for (const o of [...jarls, ...camps, ...nodes]) at.set(tileKey(o.x, o.y), o);
+  const out: Midgard = { jarls, camps, nodes, at };
+  cache.set(realmId, out);
+  return out;
+}
+
+export const jarlStrengthOf = (level: number) => MIDGARD.jarlStrength * MIDGARD.jarlGrowth ** (level - 1);
+
+/** Is this map object gone for now (beaten, shielded or gathered)? */
+export const isCleared = (state: GameState, id: string, now: number) => (state.world.cleared[id] ?? 0) > now;
+
+/** Combined strength of every alliance in a realm (its jarls, plus its land). */
+export function alliancePower(realmId: number, alliance: number): number {
+  const map = realmMap(realmId);
+  const land = map.tiles.reduce((n, t) => n + (t.owner === alliance ? 1 : 0), 0);
+  const jarls = midgard(realmId).jarls.reduce((n, j) => n + (j.alliance === alliance ? j.power : 0), 0);
+  const king = REALMS.find((r) => r.id === realmId)?.kingAlliance === alliance ? 1.15 : 1;
+  return Math.round((jarls + land * 2_500) * king);
+}
+
+function stacksFor(
+  units: Array<{
+    key: string;
+    name: string;
+    type: Combatant['type'];
+    atk: number;
+    def: number;
+    hp: number;
+    share: number;
+  }>,
+  strength: number,
+): Combatant[] {
+  return units.map((u) => {
+    const per = armyStrength([{ ...u, count: 1 }]);
+    return {
+      key: u.key,
+      name: u.name,
+      type: u.type,
+      atk: u.atk,
+      def: u.def,
+      hp: u.hp,
+      count: Math.max(1, Math.round((strength * u.share) / per)),
+    };
+  });
+}
+
+/** The beasts or outlaws in a camp. */
+export function campDefenders(camp: MapCamp): Combatant[] {
+  return stacksFor(CAMPS[camp.kind].units, MIDGARD.campStrength * MIDGARD.campGrowth ** (camp.level - 1));
+}
+
+/** A jarl's warriors and palisade. */
+export function jarlDefenders(jarl: MapJarl): Combatant[] {
+  const tier = Math.min(3, 1 + Math.floor((jarl.level - 1) / 6));
+  const shares = { shieldwall: 0.32, berserker: 0.26, archer: 0.26, cavalry: 0.16 } as const;
+  const troops = (Object.keys(shares) as Array<keyof typeof shares>).map((type) => {
+    const t = TROOPS[`${type}-${tier}`]!;
+    return { key: t.id, name: t.name, type, atk: t.atk, def: t.def, hp: t.hp, share: shares[type] };
+  });
+  const out = stacksFor(troops, jarlStrengthOf(jarl.level));
+  const w = BUILDINGS.palisade.wall;
+  if (w && jarl.level >= 3) {
+    const g = w.growth ** (Math.floor(jarl.level / 2) - 1);
+    out.unshift({
+      key: 'palisade',
+      name: BUILDINGS.palisade.name,
+      type: 'wall',
+      count: 1,
+      atk: Math.round(w.atk * 10 * g),
+      def: Math.round(10 * g),
+      hp: Math.round(w.hp * g),
+    });
+  }
+  return out;
+}
+
+/** What one warrior band can carry home. */
+export function carryOf(troops: Record<string, number>): number {
+  let n = 0;
+  for (const [id, count] of Object.entries(troops))
+    n += count * (MIDGARD.carryPerTier[TROOPS[id]?.tier ?? 0] ?? 0);
+  return n;
+}
+
+export function marchLimit(state: GameState): number {
+  return MIDGARD.marchesBase + Math.floor(hallLevel(state) / MIDGARD.marchesPerHall);
+}
+
+export function travelMs(state: GameState, x: number, y: number): number {
+  const d = Math.hypot(x - state.world.home.x, y - state.world.home.y);
+  return Math.max(MIDGARD.minTravelMs, Math.round(d * MIDGARD.travelMsPerTile));
+}
+
+/** How much a node gives this band, and how long the gathering takes. */
+export function gatherPlan(node: MapNode, troops: Record<string, number>): { amount: number; ms: number } {
+  const def = NODES[node.kind];
+  const amount = Math.min(def.perLevel * node.level, carryOf(troops));
+  return { amount, ms: Math.round((amount / def.perHour) * 3_600_000) };
+}
+
+/** Takes the chosen warriors from home, or explains why not. */
+export function takeTroops(
+  state: GameState,
+  troops: Record<string, number>,
+): Record<string, number> | string {
+  const sent: Record<string, number> = {};
+  for (const [id, n] of Object.entries(troops)) {
+    const count = Math.floor(n);
+    if (count <= 0) continue;
+    if (!TROOPS[id] || TROOPS[id].type === 'ship' || (state.army.troops[id] ?? 0) < count)
+      return 'Not enough troops at home';
+    sent[id] = count;
+  }
+  if (sumCounts(sent) === 0) return 'Choose warriors to send';
+  return sent;
+}
+
+/** Validates and starts a march. Returns an error message, or null. */
+export function startMarch(
+  state: GameState,
+  kind: March['kind'],
+  targetId: string,
+  troops: Record<string, number>,
+  now: number,
+  events: GameEvent[],
+): string | null {
+  const world = midgard(state.world.realm);
+  const target = [...world.jarls, ...world.camps, ...world.nodes].find((o) => o.id === targetId);
+  const isJarl = targetId.startsWith('j');
+  const isCamp = targetId.startsWith('c');
+  if (!target || (kind === 'attack') !== isJarl || (kind === 'hunt') !== isCamp)
+    return 'Nothing to march on there';
+  if (target.x === state.world.home.x && target.y === state.world.home.y) return 'Nothing to march on there';
+  if (
+    isJarl &&
+    (target as MapJarl).alliance !== null &&
+    (target as MapJarl).alliance === state.world.alliance
+  )
+    return 'This jarl is in your alliance';
+  if (isCleared(state, targetId, now))
+    return isJarl ? 'This hold is under a peace shield' : 'Nothing is left there for now';
+  if (state.marches.some((m) => m.target === targetId)) return 'Your warriors are already on their way there';
+  if (state.marches.length >= marchLimit(state)) return 'All your march columns are out';
+  const sent = takeTroops(state, troops);
+  if (typeof sent === 'string') return sent;
+  const travel = travelMs(state, target.x, target.y);
+  let doneAt = now + travel;
+  if (kind === 'gather') {
+    const plan = gatherPlan(target as MapNode, sent);
+    if (plan.amount <= 0) return 'Choose warriors to send';
+    doneAt += plan.ms;
+    state.world.cleared[targetId] = doneAt + MIDGARD.nodeRegrowMs;
+  }
+  addCounts(state.army.troops, sent, -1);
+  const march: March = {
+    id: state.nextMarchId++,
+    kind,
+    target: targetId,
+    x: target.x,
+    y: target.y,
+    troops: sent,
+    startAt: now,
+    arriveAt: now + travel,
+    doneAt,
+    returnAt: doneAt + travel,
+    load: {},
+    reportId: null,
+  };
+  state.marches.push(march);
+  events.push({ type: 'march.started', kind, target: targetId });
+  return null;
+}
+
+/** Calls a march home early. Gatherers bring what they have so far. */
+export function recallMarch(state: GameState, id: number, now: number): string | null {
+  const m = state.marches.find((q) => q.id === id);
+  if (!m) return 'No such march';
+  if (now >= m.doneAt) return 'They are already on their way home';
+  if (now < m.arriveAt) {
+    m.returnAt = now + (now - m.startAt);
+    m.arriveAt = m.doneAt = now;
+    // 0: turned back before any battle.
+    m.reportId = 0;
+    if (m.kind === 'gather') delete state.world.cleared[m.target];
+    return null;
+  }
+  // Gathering: bring home a share of the load.
+  const node = midgard(state.world.realm).nodes.find((n) => n.id === m.target);
+  if (node) {
+    const plan = gatherPlan(node, m.troops);
+    const share = (now - m.arriveAt) / Math.max(1, m.doneAt - m.arriveAt);
+    m.load = { [NODES[node.kind].res]: Math.floor(plan.amount * share) };
+    state.world.cleared[m.target] = now + MIDGARD.nodeRegrowMs;
+  }
+  m.doneAt = now;
+  m.returnAt = now + (m.arriveAt - m.startAt);
+  return null;
+}
+
+/** A battle at the end of a march: survivors stay in the column, the fallen are wounded or dead. */
+function fightAt(state: GameState, m: March, events: GameEvent[]): void {
+  const world = midgard(state.world.realm);
+  const rng = createRng(state.rngState);
+  const jarl = m.kind === 'attack' ? world.jarls.find((j) => j.id === m.target) : undefined;
+  const camp = m.kind === 'hunt' ? world.camps.find((c) => c.id === m.target) : undefined;
+  if (!jarl && !camp) return;
+  const attackers: Combatant[] = Object.entries(m.troops).map(([id, count]) => {
+    const t = TROOPS[id]!;
+    return { key: id, name: t.name, type: t.type, count, atk: t.atk, def: t.def, hp: t.hp };
+  });
+  const defenders = jarl ? jarlDefenders(jarl) : campDefenders(camp!);
+  const hm = heroMods(state, jarl ? 'conquest' : 'barrow');
+  const outcome = resolveBattle(attackers, defenders, rng, { attacker: hm.ours, defender: hm.theirs });
+  let room = Math.max(
+    0,
+    woundedCapacity(state) - sumCounts(state.army.wounded) - sumCounts(state.healing?.troops ?? {}),
+  );
+  const lines: ReportLine[] = [];
+  const alive: Record<string, number> = {};
+  for (const s of outcome.attacker) {
+    const fallen = s.start - s.alive;
+    const hurt = Math.min(room, Math.floor(fallen * MILITARY.woundedShare));
+    room -= hurt;
+    if (hurt > 0) addCounts(state.army.wounded, { [s.key]: hurt });
+    if (s.alive > 0) alive[s.key] = s.alive;
+    lines.push({
+      unit: s.key,
+      name: s.name,
+      type: s.type,
+      start: s.start,
+      dead: fallen - hurt,
+      wounded: hurt,
+    });
+  }
+  m.troops = alive;
+  const won = outcome.attackerWon;
+  const drops = jarl ? { 'chest-spoils': 1, 'speed-5m': 1 } : CAMPS[camp!.kind].drops;
+  recordBattle(state, won, killsOf(outcome.defender), drops);
+  const load: Cost = {};
+  if (won) {
+    const level = jarl ? jarl.level : camp!.level;
+    const base = jarl ? MIDGARD.jarlStores : CAMPS[camp!.kind].reward;
+    const share = jarl ? PVP.lootShare : 1;
+    for (const [r, v] of Object.entries(base)) load[r as keyof Cost] = Math.floor(v * level * share);
+    // Warriors carry home only what they can lift.
+    const total = Object.values(load).reduce((a, b) => a + (b ?? 0), 0);
+    const cap = carryOf(alive);
+    if (total > cap && total > 0)
+      for (const r of PRODUCED_RESOURCES) if (load[r]) load[r] = Math.floor(load[r]! * (cap / total));
+    state.world.cleared[m.target] = m.arriveAt + (jarl ? MIDGARD.jarlShieldMs : MIDGARD.campRespawnMs);
+  }
+  m.load = load;
+  const name = jarl ? jarl.name : CAMPS[camp!.kind].name;
+  const tag = jarl && jarl.alliance !== null ? `[${ALLIANCES[jarl.alliance]!.tag}] ` : '';
+  const report: BattleReport = {
+    id: state.nextReportId++,
+    at: m.arriveAt,
+    kind: jarl ? 'jarl' : 'hunt',
+    level: jarl ? jarl.level : camp!.level,
+    title: `${won ? 'Victory' : 'Defeat'} · ${tag}${name}`,
+    won,
+    rounds: outcome.rounds,
+    attacker: lines,
+    defender: outcome.defender.map((s) => ({
+      unit: s.key,
+      name: s.name,
+      type: s.type,
+      start: s.start,
+      dead: s.start - s.alive,
+      wounded: 0,
+    })),
+    saga: jarl
+      ? [
+          `Your warriors marched on the hold of ${name}.`,
+          won
+            ? 'The palisade fell and the defenders broke. Your warriors loaded what they could carry and turned for home.'
+            : 'The defenders held the gate, and your warriors fell back.',
+        ]
+      : [
+          `Your warriors tracked the ${name.toLowerCase()} across the wilds.`,
+          won
+            ? 'The fight was hard but short, and the spoils are on their way home.'
+            : 'It was too strong for them, and they fell back.',
+        ],
+    reward: load,
+    ...(won ? { items: drops } : {}),
+    read: false,
+  };
+  state.rngState = rng.state;
+  state.reports = [report, ...state.reports].slice(0, MILITARY.maxReports);
+  m.reportId = report.id;
+  if (sumCounts(alive) === 0) m.returnAt = m.arriveAt;
+  events.push({ type: 'battle.resolved', reportId: report.id, won, level: report.level, kind: report.kind });
+}
+
+/** Moves every march forward to `now`: battles on arrival, loads home on return. */
+export function advanceMarches(state: GameState, now: number, events: GameEvent[]): void {
+  if (!state.marches.length) return;
+  const sorted = [...state.marches].sort((a, b) => a.arriveAt - b.arriveAt || a.id - b.id);
+  for (const m of sorted) {
+    if (m.kind !== 'gather' && m.reportId === null && m.arriveAt <= now) fightAt(state, m, events);
+    if (m.kind === 'gather' && now >= m.doneAt && !Object.keys(m.load).length) {
+      const node = midgard(state.world.realm).nodes.find((n) => n.id === m.target);
+      if (node && m.doneAt > m.arriveAt)
+        m.load = { [NODES[node.kind].res]: gatherPlan(node, m.troops).amount };
+    }
+    if (m.returnAt <= now) {
+      state.marches = state.marches.filter((q) => q !== m);
+      addCounts(state.army.troops, m.troops);
+      for (const [r, v] of Object.entries(m.load)) state.resources[r as keyof Cost] += v ?? 0;
+      const report = m.reportId ? state.reports.find((r) => r.id === m.reportId) : undefined;
+      events.push({
+        type: 'march.returned',
+        kind: m.kind,
+        load: m.load,
+        items: report?.items ?? {},
+        troops: sumCounts(m.troops),
+      });
+    }
+  }
+}
+
+/** The closest of a list of map objects to (x, y). */
+export function nearest<T extends { x: number; y: number }>(list: T[], x: number, y: number): T | undefined {
+  let best: T | undefined;
+  let bd = Infinity;
+  for (const o of list) {
+    const d = Math.hypot(o.x - x, o.y - y);
+    if (d < bd) {
+      bd = d;
+      best = o;
+    }
+  }
+  return best;
+}

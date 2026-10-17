@@ -1,4 +1,4 @@
-import { ALLIANCES, DUEL_THEMES, REALMS, REGIONS, WORLD, type RealmDef } from '../data/world';
+import { ALLIANCES, REALMS, REGIONS, WORLD, type RealmDef } from '../data/world';
 import { createNoise2D } from '../noise';
 import { createRng, hashString, nextInt } from '../rng';
 import { TROOPS } from '../data/troops';
@@ -125,9 +125,19 @@ export function realmMap(realmId: number): RealmMap {
   }
 
   // A newcomer's hold: free land on the rim.
-  const rim = tiles.filter(
+  // A newcomer needs room to grow: free land on at least three sides.
+  const freeLand = (x: number, y: number) => {
+    const t = x < 0 || y < 0 || x >= n || y >= n ? undefined : at(x, y);
+    return !!t && t.owner === null && (t.kind === 'field' || t.kind === 'forest' || t.kind === 'hills');
+  };
+  const roomy = (t: Tile) =>
+    [freeLand(t.x + 1, t.y), freeLand(t.x - 1, t.y), freeLand(t.x, t.y + 1), freeLand(t.x, t.y - 1)].filter(
+      Boolean,
+    ).length >= 3;
+  const open = tiles.filter(
     (t) => t.owner === null && t.kind !== 'sea' && t.kind !== 'town' && Math.hypot(t.x - c, t.y - c) > 13,
   );
+  const rim = open.filter(roomy).length ? open.filter(roomy) : open;
   const home = rim.length ? rim[nextInt(rng, 0, rim.length - 1)]! : at(0, 0)!;
 
   const map: RealmMap = { realm, size: n, tiles, seats, towns, home: { x: home.x, y: home.y } };
@@ -201,31 +211,6 @@ export function kingsWar(now: number, realmId: number) {
   ][week % 3]!;
   const opponent = pairings[(realmId - 1) % 4]!;
   return { start, end: end(start), live: now >= start, opponent: REALMS.find((r) => r.id === opponent)! };
-}
-
-/** Today's Alliance Duel: your alliance against a rival in the same realm. Points from today's deeds. */
-export function allianceDuel(state: GameState, now: number) {
-  const d = new Date(now);
-  const theme = DUEL_THEMES.find((t) => t.day === d.getUTCDay())!;
-  const mine = state.world.alliance;
-  const quests = state.quests.progress;
-  const metricProgress: Record<string, number> = {
-    'construction.started': quests['start-3'] ?? 0,
-    'building.completed': quests['complete-2'] ?? 0,
-    'troops.trained': quests['train-30'] ?? 0,
-    'produced.food': quests['food-2000'] ?? 0,
-    'produced.timber': quests['timber-2000'] ?? 0,
-    'battle.won': quests['win-battle'] ?? 0,
-  };
-  const yours = Math.round((metricProgress[theme.metric] ?? 0) * theme.points);
-  const day = Math.floor(now / 86_400_000);
-  const rival = mine === null ? null : (mine + 1 + (day % (ALLIANCES.length - 1))) % ALLIANCES.length;
-  // Your alliance-mates and the rival are AI for now: their score grows through the day.
-  const progress = (now % 86_400_000) / 86_400_000;
-  const base = (seed: string) => 20_000 + (hashString(seed) % 30_000);
-  const team = mine === null ? 0 : Math.round(base(`ally-${day}-${mine}`) * progress) + yours;
-  const enemy = rival === null ? 0 : Math.round(base(`rival-${day}-${rival}`) * progress * 1.05);
-  return { theme: theme.theme, metric: theme.metric, yours, team, rival, enemy };
 }
 
 /** The warriors holding a tile: stronger towards the Law Rock, and on alliance land. */

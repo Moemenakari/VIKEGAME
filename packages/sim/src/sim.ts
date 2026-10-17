@@ -52,6 +52,9 @@ import {
   upgradeDurationMs,
 } from './systems/economy';
 import { rollQuestDay, trackQuests } from './systems/quests';
+import { advanceMarches, midgard, recallMarch, startMarch } from './systems/midgard';
+import { claimVs, trackVs } from './systems/vs';
+import { itemDef } from './data/items';
 
 /** Every player action is one of these plain, serialisable commands (ARCHITECTURE §3). */
 export type Command =
@@ -80,6 +83,11 @@ export type Command =
     }
   | { type: 'joinAlliance'; alliance: number | null }
   | { type: 'conquerTile'; x: number; y: number; troops: Record<string, number> }
+  | { type: 'gather'; nodeId: string; troops: Record<string, number> }
+  | { type: 'hunt'; campId: string; troops: Record<string, number> }
+  | { type: 'attackJarl'; jarlId: string; troops: Record<string, number> }
+  | { type: 'recall'; marchId: number }
+  | { type: 'claimVs' }
   | { type: 'upgrade'; buildingId: string }
   | { type: 'finishFree'; buildingId: string; queue?: TimerKind }
   | { type: 'finishWithGold'; buildingId: string; queue?: TimerKind }
@@ -230,6 +238,7 @@ function advanceInPlace(state: GameState, now: number, events: GameEvent[]): voi
   for (const job of state.training.filter((j) => j.endsAt <= now)) completeTraining(state, job, events);
   if (state.healing && state.healing.endsAt <= now) completeHealing(state, events);
   advanceRaids(state, now, events);
+  advanceMarches(state, now, events);
 
   if (Object.values(produced).some((v) => v > 0)) {
     events.push({ type: 'resources.produced', amounts: produced });
@@ -242,6 +251,7 @@ export function advance(prev: GameState, now: number): StepResult {
   const events: GameEvent[] = [];
   advanceInPlace(state, now, events);
   trackQuests(state, events);
+  trackVs(state, events, now);
   return { state, events };
 }
 
@@ -344,6 +354,8 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     if (owner !== null && owner === state.world.alliance)
       return fail('LOCKED', 'This land belongs to your alliance');
     if (!bordersHold(state, tile.x, tile.y)) return fail('LOCKED', 'You can only take land next to your own');
+    if (midgard(state.world.realm).jarls.some((j) => j.x === tile.x && j.y === tile.y))
+      return fail('OCCUPIED', "A jarl's hold stands there: attack the hold instead");
     if (state.world.owned.length + 1 >= tileLimit(hallLevel(state)))
       return fail('LIMIT', 'Upgrade the Great Hall to hold more land');
     const sent: Record<string, number> = {};
@@ -466,8 +478,40 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     return null;
   },
 
-  useItem(state, cmd, now) {
+  useItem(state, cmd, now, events) {
     const err = useItem(state, cmd.itemId, cmd.count, cmd.target, now);
+    if (err) return fail('NOT_READY', err);
+    const def = itemDef(cmd.itemId);
+    if (def?.kind === 'chest') {
+      const reward: Cost = {};
+      for (const [r, v] of Object.entries(def.contents)) reward[r as keyof Cost] = (v ?? 0) * cmd.count;
+      events.push({ type: 'chest.opened', reward });
+    }
+    return null;
+  },
+
+  gather(state, cmd, now, events) {
+    const err = startMarch(state, 'gather', cmd.nodeId, cmd.troops, now, events);
+    return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
+  },
+
+  hunt(state, cmd, now, events) {
+    const err = startMarch(state, 'hunt', cmd.campId, cmd.troops, now, events);
+    return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
+  },
+
+  attackJarl(state, cmd, now, events) {
+    const err = startMarch(state, 'attack', cmd.jarlId, cmd.troops, now, events);
+    return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
+  },
+
+  recall(state, cmd, now) {
+    const err = recallMarch(state, cmd.marchId, now);
+    return err ? fail('NOT_READY', err) : null;
+  },
+
+  claimVs(state, _cmd, _now, events) {
+    const err = claimVs(state, events);
     return err ? fail('NOT_READY', err) : null;
   },
 
@@ -475,7 +519,11 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     const realm = REALMS.find((r) => r.id === cmd.realm);
     const tile = realm && tileAt(realmMap(realm.id), cmd.x, cmd.y);
     if (!realm || !tile || tile.kind === 'sea') return fail('UNKNOWN', 'No such place');
-    if (state.world.realm !== realm.id) state.world.owned = [];
+    if (state.world.realm !== realm.id) {
+      if (state.marches.length) return fail('BUSY', 'Wait for your marches to come home first');
+      state.world.owned = [];
+      state.world.cleared = {};
+    }
     state.world.realm = realm.id;
     state.world.home = { x: cmd.x, y: cmd.y };
     return null;
@@ -807,6 +855,7 @@ export function apply(prev: GameState, cmd: Command, now: number): ApplyResult {
   const error = handler(state, cmd, now, events);
   if (error) return { ok: false, error };
   trackQuests(state, events);
+  trackVs(state, events, now);
   return { ok: true, state, events };
 }
 

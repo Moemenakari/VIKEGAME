@@ -61,6 +61,10 @@ export const ALLIANCES: readonly AllianceDef[] = [
   { tag: 'MIK', name: 'The Great Army', color: '#6f8f3a', source: 'Anglo-Saxon Chronicle, 865' },
   { tag: 'DYF', name: 'Norse of Dyflin', color: '#7a5aa8', source: 'Irish annals' },
   { tag: 'HLA', name: 'Jarls of Hlaðir', color: '#c06a2a', source: 'Heimskringla' },
+  { tag: 'ORK', name: 'Jarls of Orkney', color: '#2f8f80', source: 'Orkneyinga saga' },
+  { tag: 'JOR', name: 'Kings of Jórvík', color: '#b8486e', source: 'Anglo-Saxon Chronicle, 867–954' },
+  { tag: 'RUD', name: 'Northmen of Rouen', color: '#5a6fc0', source: 'Dudo of Saint-Quentin; treaty of 911' },
+  { tag: 'GUT', name: 'Gutar of Gotland', color: '#8a7f3a', source: 'Gutasaga; Gotland picture stones' },
 ];
 
 /** Regions of Midgard by compass direction from the Law Rock (GDD §8). */
@@ -103,14 +107,3 @@ export const WORLD = {
   kingsWarHourUtc: 12,
   kingsWarHours: 2,
 } as const;
-
-/** The Alliance Duel (alliance against alliance inside a realm): one theme per weekday. */
-export const DUEL_THEMES = [
-  { day: 1, theme: 'build', metric: 'construction.started', points: 300 },
-  { day: 2, theme: 'train', metric: 'troops.trained', points: 15 },
-  { day: 3, theme: 'gather', metric: 'produced.food', points: 1 },
-  { day: 4, theme: 'battle', metric: 'battle.won', points: 2_000 },
-  { day: 5, theme: 'build', metric: 'building.completed', points: 400 },
-  { day: 6, theme: 'war', metric: 'battle.won', points: 3_000 },
-  { day: 0, theme: 'gather', metric: 'produced.timber', points: 1 },
-] as const;

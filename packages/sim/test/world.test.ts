@@ -3,7 +3,6 @@ import {
   ALLIANCES,
   REALMS,
   WORLD,
-  allianceDuel,
   apply,
   bordersHold,
   kingsWar,
@@ -84,15 +83,5 @@ describe('the world map', () => {
     expect(kingsWar(w.start + 1000, 1).live).toBe(true);
     // Pairings are symmetric: if 1 fights X, X fights 1.
     expect(kingsWar(T0, w.opponent.id).opponent.id).toBe(1);
-  });
-
-  it('runs an Alliance Duel once you join an alliance', () => {
-    const s = newGame(1, T0);
-    expect(allianceDuel(s, T0).rival).toBeNull();
-    const r = apply(s, { type: 'joinAlliance', alliance: 2 }, T0);
-    if (!r.ok) throw new Error(r.error.message);
-    const duel = allianceDuel(r.state, T0);
-    expect(duel.rival).not.toBe(2);
-    expect(duel.team).toBeGreaterThanOrEqual(duel.yours);
   });
 });

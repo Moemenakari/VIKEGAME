@@ -1,5 +1,6 @@
 import type { BuildingType } from './data/buildings';
 import type { Cost, ProducedResourceId } from './data/resources';
+import type { BattleReport, March } from './state';
 
 /** Everything that happened during a step. The UI turns these into toasts, sounds and effects. */
 export type GameEvent =
@@ -16,10 +17,20 @@ export type GameEvent =
   | { type: 'training.completed'; buildingId: string; troopId: string; count: number }
   | { type: 'healing.started'; count: number }
   | { type: 'healing.completed'; count: number }
-  | { type: 'battle.resolved'; reportId: number; won: boolean; level: number }
+  | { type: 'battle.resolved'; reportId: number; won: boolean; level: number; kind?: BattleReport['kind'] }
   | { type: 'raid.spotted'; landsAt: number }
   | { type: 'raid.resolved'; reportId: number; won: boolean }
   | { type: 'heroes.recruited'; heroes: string[] }
+  | { type: 'march.started'; kind: March['kind']; target: string }
+  | {
+      type: 'march.returned';
+      kind: March['kind'];
+      load: Cost;
+      items: Record<string, number>;
+      troops: number;
+    }
+  | { type: 'chest.opened'; reward: Cost }
+  | { type: 'vs.claimed'; won: boolean; items: Record<string, number>; reward: Cost }
   | {
       type: 'pvp.fought';
       targetId: string;

@@ -1,5 +1,6 @@
-import { ALLIANCES, type GameState } from '@jarlheim/sim';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ALLIANCES, vsStandings, type GameState } from '@jarlheim/sim';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { botMessages, botReply, isBot, type BotContext } from './botChat';
 import { chatBackend } from '../online';
 import {
   REACTIONS,
@@ -41,6 +42,17 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('realm');
   const [open, setOpen] = useState<string | null>(null);
+
+  const vs = vsStandings(state, Date.now());
+  const bots = (channel: BotContext['channel']): BotContext => ({
+    channel,
+    realm: state.world.realm,
+    alliance: state.world.alliance,
+    player: me?.name ?? state.profile.name,
+    theme: t(`vsTheme_${vs.theme}`),
+    rival: vs.mine?.rival ?? null,
+    ahead: !!vs.mine && vs.mine.team >= vs.mine.enemy,
+  });
 
   const signedInRef = useRef(onSignedIn);
   signedInRef.current = onSignedIn;
@@ -123,7 +135,13 @@ export function ChatPanel({
                 ))}
               </div>
               {tab === 'realm' && (
-                <Conversation chat={chat} me={me} channelId={realmChannelId(state.world.realm)} embedded />
+                <Conversation
+                  chat={chat}
+                  me={me}
+                  channelId={realmChannelId(state.world.realm)}
+                  embedded
+                  bots={bots('realm')}
+                />
               )}
               {tab === 'alliance' &&
                 (playerAlliance ? (
@@ -133,7 +151,7 @@ export function ChatPanel({
                   </>
                 ) : state.world.alliance === null ? (
                   <div>
-                    <p className="muted">{t('duelJoin')}</p>
+                    <p className="muted">{t('vsJoin')}</p>
                     <button className="primary" onClick={onOpenWorld}>
                       🌍 {t('alliances')}
                     </button>
@@ -148,6 +166,7 @@ export function ChatPanel({
                       me={me}
                       channelId={allianceChannelId(state.world.realm, state.world.alliance)}
                       embedded
+                      bots={bots('alliance')}
                     />
                   </>
                 ))}
@@ -274,14 +293,35 @@ function Conversation({
   channelId,
   embedded,
   onBack,
+  bots,
 }: {
   chat: ChatBackend;
   me: ChatProfile;
   channelId: string;
   embedded?: boolean;
   onBack?: () => void;
+  /** AI jarls who talk in this channel (realm and saga-alliance chats). */
+  bots?: BotContext;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [replies, setReplies] = useState<ChatMessage[]>([]);
+  const [tick, setTick] = useState(0);
+  const hasBots = !!bots;
+  useEffect(() => {
+    if (!hasBots) return;
+    const id = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, [hasBots]);
+  const botKey = bots ? `${bots.channel}-${bots.realm}-${bots.alliance}-${bots.theme}` : '';
+  const shown = useMemo(
+    () =>
+      bots
+        ? [...messages, ...botMessages(bots, channelId, Date.now()), ...replies].sort((a, b) =>
+            a.createdAt.localeCompare(b.createdAt),
+          )
+        : messages,
+    [messages, replies, botKey, channelId, tick],
+  );
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [kind, setKind] = useState<ChatChannel['kind']>('realm');
@@ -308,14 +348,23 @@ function Conversation({
 
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight });
-  }, [messages]);
+  }, [shown]);
 
   const send = async (image?: Blob) => {
     if (!text.trim() && !image) return;
     setError(null);
     try {
-      await chat.send(channelId, text.trim(), image);
+      const said = text.trim();
+      await chat.send(channelId, said, image);
       setText('');
+      // Now and then an AI jarl answers (a few seconds later, like a person typing).
+      if (bots && said && Math.random() < 0.7) {
+        const ctx = bots;
+        setTimeout(
+          () => setReplies((r) => [...r, botReply(ctx, channelId, said, Date.now())]),
+          2_500 + Math.random() * 4_000,
+        );
+      }
     } catch (e) {
       setError(errorText((e as Error).message));
     }
@@ -348,25 +397,28 @@ function Conversation({
         </button>
       )}
       <div className="messages" ref={list}>
-        {messages.map((m) => (
-          <div key={m.id} className={`msg ${m.senderId === me.id ? 'mine' : ''}`}>
+        {shown.map((m) => (
+          <div key={m.id} className={`msg ${m.senderId === me.id ? 'mine' : ''} ${isBot(m) ? 'bot' : ''}`}>
             <span className="who">
               {m.senderName}
               {m.senderVip > 0 && <span className="vip">VIP {m.senderVip}</span>}
+              {isBot(m) && <span className="ai-tag">{t('aiTag')}</span>}
             </span>
             {m.body && <p>{m.body}</p>}
             {m.imageUrl && <img src={m.imageUrl} alt="" loading="lazy" />}
-            <span className="reacts">
-              {REACTIONS.slice(0, 3).map((e) => (
-                <button key={e} onClick={() => void react(m, e)} data-testid={`react-${e}`}>
-                  {e}
-                  {(m.reactions[e]?.length ?? 0) > 0 && <small>{m.reactions[e]!.length}</small>}
-                </button>
-              ))}
-            </span>
+            {!isBot(m) && (
+              <span className="reacts">
+                {REACTIONS.slice(0, 3).map((e) => (
+                  <button key={e} onClick={() => void react(m, e)} data-testid={`react-${e}`}>
+                    {e}
+                    {(m.reactions[e]?.length ?? 0) > 0 && <small>{m.reactions[e]!.length}</small>}
+                  </button>
+                ))}
+              </span>
+            )}
           </div>
         ))}
-        {messages.length === 0 && <p className="muted">{t('noMessages')}</p>}
+        {shown.length === 0 && <p className="muted">{t('noMessages')}</p>}
       </div>
       {error && <p className="blocked">{error}</p>}
       <form

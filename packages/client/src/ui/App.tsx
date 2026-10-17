@@ -13,8 +13,11 @@ import {
   suggestSpot,
   type BuildingType,
   type GameState,
+  BATTLE_DROPS,
+  vsStandings,
+  type Cost,
 } from '@jarlheim/sim';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { GameStore } from '../game/store';
 import { Engine } from '../scene/Engine';
 import { loadQuality } from '../scene/quality';
@@ -39,6 +42,8 @@ import {
 } from './icons';
 import { PlotPanel } from './PlotPanel';
 import { WorldMap } from './WorldMap';
+import { RewardBurst, type Burst } from './RewardBurst';
+import { botMessages } from './botChat';
 import { ChatPanel } from './ChatPanel';
 import { HeroesPanel } from './HeroesPanel';
 import { useOnline } from './useOnline';
@@ -109,6 +114,31 @@ function describe(e: GameEvent): string | null {
   }
 }
 
+/** What a step won, for the "You won!" burst: spoils home, a victory, a chest, a quest or VS reward. */
+function rewardOf(events: GameEvent[], state: GameState): Burst | null {
+  const reward: Cost = {};
+  const items: Record<string, number> = {};
+  let title: string | null = null;
+  const add = (r: Cost, i: Record<string, number> = {}, name: string) => {
+    for (const [k, v] of Object.entries(r))
+      reward[k as keyof Cost] = (reward[k as keyof Cost] ?? 0) + (v ?? 0);
+    for (const [k, v] of Object.entries(i)) items[k] = (items[k] ?? 0) + v;
+    title ??= name;
+  };
+  for (const e of events) {
+    if (e.type === 'march.returned' && (Object.keys(e.load).length || Object.keys(e.items).length))
+      add(e.load, e.items, t('spoilsHome'));
+    else if (e.type === 'battle.resolved' && e.won && e.kind !== 'hunt' && e.kind !== 'jarl') {
+      const r = state.reports.find((x) => x.id === e.reportId);
+      if (r) add(r.reward, r.kind === 'conquest' ? BATTLE_DROPS.landTaken : BATTLE_DROPS.barrow, t('youWon'));
+    } else if (e.type === 'pvp.fought' && e.won) add(e.loot, BATTLE_DROPS.pvpWon, t('youWon'));
+    else if (e.type === 'chest.opened') add(e.reward, {}, t('chestOpened'));
+    else if (e.type === 'quest.claimed') add(e.reward, {}, t('questReward'));
+    else if (e.type === 'vs.claimed') add(e.reward, e.items, t('vsClaim'));
+  }
+  return title && (Object.keys(reward).length || Object.keys(items).length) ? { title, reward, items } : null;
+}
+
 function offlineSummary(events: GameEvent[]): string | null {
   const produced = events.find((e) => e.type === 'resources.produced');
   if (!produced || produced.type !== 'resources.produced') return null;
@@ -173,6 +203,8 @@ function Game({
   const [hint, setHint] = useState<string | null>(null);
   const prefs = usePrefs();
   const [placing, setPlacing] = useState<Placing | null>(null);
+  const [burst, setBurst] = useState<Burst | null>(null);
+  const endBurst = useCallback(() => setBurst(null), []);
 
   const select = useCallback((id: string | null) => {
     setReportId(null);
@@ -259,6 +291,8 @@ function Game({
         );
         const lines = wanted.map(describe).filter((x): x is string => x !== null);
         if (lines.length) setToast(lines.join(' · '));
+        const won = rewardOf(events, store.snapshot);
+        if (won) setBurst(won);
       }),
     [setToast, store],
   );
@@ -374,6 +408,32 @@ function Game({
   const claimable = claimableQuests(state);
   const main = currentMainQuest(state);
   const report = reportId !== null ? state.reports.find((r) => r.id === reportId) : undefined;
+  // The latest line of realm chat, refreshed every half minute.
+  const [chatTick, setChatTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setChatTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const chatLine = useMemo(() => {
+    const now = Date.now();
+    const vs = vsStandings(store.snapshot, now);
+    return (
+      botMessages(
+        {
+          channel: 'realm',
+          realm: state.world.realm,
+          alliance: state.world.alliance,
+          player: state.profile.name,
+          theme: t(`vsTheme_${vs.theme}`),
+          rival: vs.mine?.rival ?? null,
+          ahead: !!vs.mine && vs.mine.team >= vs.mine.enemy,
+        },
+        'strip',
+        now,
+        1,
+      )[0] ?? null
+    );
+  }, [chatTick, lang, state.world.realm, state.world.alliance, state.profile.name]);
   const unread = state.reports.filter((r) => !r.read).length;
   const warriors = sumCounts(state.army.troops);
   const power = totalPower(state);
@@ -645,6 +705,15 @@ function Game({
               setPanel(null);
             }}
           />
+        )}
+
+        {burst && <RewardBurst burst={burst} onDone={endBurst} />}
+
+        {/* The realm chat in one line: the AI jarls (and players) talk while you play. */}
+        {chatLine && !selected && !panel && !report && !placing && (
+          <button className="chat-strip" onClick={() => openPanel('chat')} data-testid="chat-strip">
+            💬 <b>{chatLine.senderName}</b> {chatLine.body}
+          </button>
         )}
 
         {toast && (

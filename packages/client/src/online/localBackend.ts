@@ -156,7 +156,7 @@ export class LocalBackend implements ChatBackend {
       unread: 0,
     });
     if (!this.log.some((m) => m.channelId === id))
-      this.push(id, 'npc-sigrun', 'Welcome to the alliance! Help each other build and we win the duel.');
+      this.push(id, 'npc-sigrun', 'Welcome to the alliance! Help each other and we win the VS.');
   }
 
   async createProfile(name: string): Promise<ChatProfile> {

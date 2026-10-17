@@ -402,6 +402,12 @@ export function ReportView({ report, onClose }: { report: BattleReport; onClose:
           {t('loot')}: <CostLine cost={report.loot} />
         </p>
       )}
+      {(report.kind === 'hunt' || report.kind === 'jarl') && Object.keys(report.reward).length > 0 && (
+        <p className="stat">
+          {t('spoils')}: <CostLine cost={report.reward} />{' '}
+          {Object.keys(report.items ?? {}).length > 0 && '🎁'}
+        </p>
+      )}
       {report.kind === 'raid' && Object.keys(report.reward).length > 0 && (
         <p className="stat">
           {t('salvage')}: <CostLine cost={report.reward} />

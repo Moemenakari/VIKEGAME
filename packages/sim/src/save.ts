@@ -6,6 +6,7 @@ import {
   emptyMilitary,
   freshProfile,
   freshBag,
+  freshMarches,
   freshRaids,
   freshWorld,
   plotSpot,
@@ -44,6 +45,12 @@ const migrations: Record<number, (state: Record<string, unknown>) => Record<stri
   5: (state) => ({ heroes: freshHeroes(), ...state }),
   // v6 → v7: the Bag and the profile's deeds.
   6: (state) => ({ ...freshBag(), ...state }),
+  // v7 → v8: marches on the map (gather, hunt, attack jarls) and the Alliance VS.
+  7: (state) => ({
+    ...freshMarches(),
+    ...state,
+    world: { cleared: {}, ...((state.world ?? {}) as Record<string, unknown>) },
+  }),
 };
 
 export function serialize(state: GameState): string {
@@ -104,7 +111,9 @@ function isGameState(s: unknown): s is GameState {
   if (!isObj(hz) || !isObj(hz.owned) || !Array.isArray(hz.squad) || !isNum(hz.horns) || !isObj(hz.pity))
     return false;
   const w = s.world;
-  if (!isObj(w) || !isNum(w.realm) || !isObj(w.home) || !Array.isArray(w.owned)) return false;
+  if (!isObj(w) || !isNum(w.realm) || !isObj(w.home) || !Array.isArray(w.owned) || !isObj(w.cleared))
+    return false;
+  if (!Array.isArray(s.marches) || !isNum(s.nextMarchId) || !isObj(s.vs) || !isNum(s.vs.points)) return false;
   const raid = s.raid;
   if (!isObj(raid) || !isNum(raid.count) || !(raid.nextAt === null || isNum(raid.nextAt))) return false;
   return (
