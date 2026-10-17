@@ -551,6 +551,10 @@ function SettingsView({
         <p className="muted">{t('supportSignIn')}</p>
       )}
 
+      <p className="muted" data-testid="version">
+        {t('version')}: {__BUILD_ID__} · {__BUILD_DATE__} UTC
+      </p>
+
       <h3>📜 {t('legal')}</h3>
       <div className="setting-row">
         <button

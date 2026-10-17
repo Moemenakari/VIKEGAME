@@ -31,6 +31,8 @@ import {
   columns,
   columnDefenders,
   marchPos,
+  isWaypoint,
+  columnAt,
   type MapColumn,
   jarlProfile,
   HEROES,
@@ -473,7 +475,7 @@ export function WorldMap({
           v.fromY + (v.toY - v.fromY) * v.at + 0.5 - fy,
         ),
       }))
-      .filter((q) => q.d < 0.8 && !q.v.id.startsWith('s'))
+      .filter((q) => q.d < 1.3 && !q.v.id.startsWith('s'))
       .sort((a, b) => a.d - b.d)[0];
     if (near && steer === null) {
       setSheet(null);
@@ -503,6 +505,8 @@ export function WorldMap({
     if (steer !== null) {
       const goal = fort ?? (thing && !thing.id.startsWith('n') ? thing : undefined);
       if (goal) return steerTo(goal.id);
+      // Empty ground: walk there and stand, waiting for the next order.
+      if (tile && tile.kind !== 'sea') return steerTo(`p:${x},${y}`);
       setSteer(null);
     }
     if (player) setPicked({ kind: 'player', player });
@@ -552,6 +556,12 @@ export function WorldMap({
   }, []);
   const traffic = useMemo(() => realmTraffic(realmId), [realmId]);
   liveRef.current = { state, realmId, traffic };
+  // A picked column keeps the camera and the ring on it as it moves.
+  const followId =
+    picked?.kind === 'march' ? `m${picked.id}` : picked?.kind === 'column' ? picked.column.id : null;
+  useEffect(() => {
+    scene3d.current?.setFollow(followId);
+  }, [followId]);
   useEffect(() => {
     scene3d.current?.setRealm(map);
   }, [map, no3d]);
@@ -673,6 +683,7 @@ export function WorldMap({
   const war = kingsWar(now, state.world.realm);
   const vsResultNow = mine ? vsResult(state) : null;
   const targetName = (m: March) => {
+    if (isWaypoint(m.target)) return `📍 ${m.target.slice(2)}`;
     const col = columns(realmId).find((q) => q.id === m.target);
     if (col) return `${col.jarl.name} · ${t('column')}`;
     const o = [...world.jarls, ...forts(realmId)].find((q) => q.id === m.target);
@@ -858,6 +869,7 @@ export function WorldMap({
                     ? m.doneAt - now
                     : m.returnAt - now;
             const back = now >= m.doneAt;
+            const standing = isWaypoint(m.target) && now >= m.arriveAt && !back;
             return (
               <li key={m.id}>
                 <button
@@ -870,8 +882,10 @@ export function WorldMap({
                     setPicked({ kind: 'march', id: m.id });
                   }}
                 >
-                  <b>{i + 1}</b> {m.kind === 'gather' ? '🛒' : m.allies ? '⚑' : back ? '↩' : '⚔️'}{' '}
-                  {formatDuration(Math.max(0, left))}
+                  <b>{i + 1}</b>{' '}
+                  {standing
+                    ? `⏸ ${t('standing')}`
+                    : `${m.kind === 'gather' ? '🛒' : m.allies ? '⚑' : back ? '↩' : '⚔️'} ${formatDuration(Math.max(0, left))}`}
                 </button>
               </li>
             );
@@ -1417,6 +1431,8 @@ function MarchCard({
   const m = state.marches.find((q) => q.id === id);
   if (!m) return null;
   const outbound = now < m.arriveAt && m.reportId === null;
+  const standing = isWaypoint(m.target) && now >= m.arriveAt && now < m.doneAt;
+  const homeward = now >= m.doneAt && sumCounts(m.troops) > 0;
   const pos = marchPos(state, m, now);
   const left = (outbound ? m.arriveAt : now < m.doneAt ? m.doneAt : m.returnAt) - now;
   return (
@@ -1428,8 +1444,9 @@ function MarchCard({
         {m.kind === 'gather' ? '🛒' : '⚔️'} {t('yourColumn')}
       </h2>
       <p className="stat">
-        {t(outbound ? 'm_out' : now < m.doneAt ? 'm_gathering' : 'm_back')} ·{' '}
-        {formatDuration(Math.max(0, left))}
+        {standing
+          ? `⏸ ${t('standing')}`
+          : `${t(outbound ? 'm_out' : now < m.doneAt ? 'm_gathering' : 'm_back')} · ${formatDuration(Math.max(0, left))}`}
       </p>
       <p className="muted">
         ⚡ {t('speedTiles', { n: tilesPerMinute(m.troops) })} · 🧭 {Math.round(pos.x)}, {Math.round(pos.y)}
@@ -1443,7 +1460,7 @@ function MarchCard({
         ))}
       </p>
       <div className="row">
-        {outbound && m.kind !== 'gather' && !m.allies && (
+        {(outbound || standing || homeward) && m.kind !== 'gather' && !m.allies && (
           <button className="primary" data-testid="steer" onClick={() => onSteer(m.id)}>
             🧭 {t('steer')}
           </button>
@@ -1510,6 +1527,23 @@ function ColumnCard({
             <TroopTypeIcon type={g.type} size={14} /> {formatAmount(g.count)}
           </span>
         ))}
+      </p>
+      <p className="stat" data-testid="column-route">
+        {(() => {
+          const p = columnAt(column, now);
+          const w = midgard(state.world.realm);
+          const goal =
+            w.camps.find((c) => c.x === column.toX && c.y === column.toY) ??
+            w.nodes.find((n) => n.x === column.toX && n.y === column.toY);
+          const goalName = goal
+            ? 'kind' in goal && goal.id.startsWith('c')
+              ? t(`camp_${(goal as MapCamp).kind}`)
+              : t(`node_${(goal as MapNode).kind}`)
+            : '';
+          return p.out
+            ? `${t('colFrom')} ${j.name} → ${t('colTo')} ${goalName}`
+            : `${t('colFrom')} ${goalName} → ${t('colBack')} ${j.name}`;
+        })()}
       </p>
       <p className="muted">{t('columnHow')}</p>
       {mine &&
@@ -2329,7 +2363,8 @@ function marchViews(
         phase,
         unit: m.kind === 'gather' ? 'cart' : siege ? 'siege' : riders ? 'riders' : 'troops',
         color: ME,
-        battle: m.kind !== 'gather' && now >= m.arriveAt && now < m.arriveAt + 5_000,
+        battle: m.kind !== 'gather' && !isWaypoint(m.target) && now >= m.arriveAt && now < m.arriveAt + 5_000,
+        standing: isWaypoint(m.target) && phase === 'there',
       });
     }
   }

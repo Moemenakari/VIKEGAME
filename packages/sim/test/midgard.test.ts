@@ -363,6 +363,30 @@ describe('march speed and jarl profiles', () => {
     expect(s.world.foes).toEqual(['j3']);
   });
 
+  it('a column can be sent to any spot: it walks there, stands, takes new orders, and walks home when recalled', () => {
+    let s = newGame(1, T0);
+    s.army.troops = { 'shieldwall-2': 100 };
+    const camp = midgard(1).camps.filter((c) => c.kind !== 'treasure')[0]!;
+    s = must(s, { type: 'hunt', campId: camp.id, troops: { 'shieldwall-2': 100 } }, T0);
+    const id = s.marches[0]!.id;
+    const spot = `p:${s.world.home.x},${s.world.home.y + 3}`;
+    s = must(s, { type: 'redirect', marchId: id, targetId: spot }, T0 + 5000);
+    let m = s.marches[0]!;
+    const r = advance(s, m.arriveAt + 60_000);
+    m = r.state.marches[0]!;
+    expect(r.state.reports.filter((q) => q.kind === 'hunt')).toHaveLength(0);
+    expect(marchPos(r.state, m, m.arriveAt + 60_000)).toEqual({ x: s.world.home.x, y: s.world.home.y + 3 });
+    // Standing there, it can go on to a target…
+    const moved = apply(r.state, { type: 'redirect', marchId: id, targetId: camp.id }, m.arriveAt + 61_000);
+    expect(moved.ok).toBe(true);
+    // …or be called home, a walk of three tiles.
+    s = must(r.state, { type: 'recall', marchId: id }, m.arriveAt + 61_000);
+    expect(s.marches[0]!.returnAt).toBeLessThan(m.arriveAt + 61_000 + 4 * MIDGARD.travelMsPerTile);
+    expect(apply(s, { type: 'redirect', marchId: id, targetId: 'p:-1,4' }, m.arriveAt + 62_000).ok).toBe(
+      false,
+    );
+  });
+
   it("a jarl's profile splits its power and shows deeds, speed and heroes", () => {
     const j = midgard(1).jarls[3]!;
     const p = jarlProfile(j);

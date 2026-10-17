@@ -59,6 +59,8 @@ export interface MarchView {
   color: string;
   /** Fighting at the target (smoke and fire). */
   battle: boolean;
+  /** Standing at a spot, waiting for orders (drawn even though it is "there"). */
+  standing?: boolean;
 }
 
 export interface WorldViewData {
@@ -310,6 +312,12 @@ export class WorldScene {
     this.marches = fn;
   }
 
+  /** Keep the camera and the selection ring on a moving column (null to stop). */
+  setFollow(id: string | null): void {
+    this.follow = id;
+  }
+  private follow: string | null = null;
+
   /** The realm itself: ground, territory, forests and hills. Rebuilt when the realm changes. */
   setRealm(map: RealmMap): void {
     for (const child of [...this.statics.children]) {
@@ -391,7 +399,9 @@ export class WorldScene {
   /** Holds, camps and nodes. Instances are rewritten only when something changed. */
   setView(view: WorldViewData): void {
     const key = JSON.stringify([view.holds, view.camps, view.nodes]);
-    if (view.picked) {
+    if (this.follow) {
+      // The ring rides with the followed column (see loop).
+    } else if (view.picked) {
       this.pickRing.visible = true;
       this.pickRing.position.set((view.picked.x + 0.5) * U, 0.4, (view.picked.y + 0.5) * U);
     } else this.pickRing.visible = false;
@@ -622,8 +632,10 @@ export class WorldScene {
   private onMove = (e: PointerEvent) => {
     const prev = this.pointers.get(e.pointerId);
     if (!prev) return;
-    if (this.press && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 8)
+    if (this.press && Math.hypot(e.clientX - this.press.x, e.clientY - this.press.y) > 8) {
       this.press.moved = true;
+      this.follow = null;
+    }
     if (this.pointers.size === 1) {
       // Drag: the ground under your finger follows it (any direction, like a map app).
       this.updateCamera();
@@ -717,6 +729,20 @@ export class WorldScene {
       this.discs.instanceMatrix.needsUpdate = true;
     }
     this.updateUnits(far);
+    if (this.follow) {
+      const m = this.marches().find((q) => q.id === this.follow);
+      if (m) {
+        const x = (m.fromX + (m.toX - m.fromX) * m.at + 0.5) * U;
+        const z = (m.fromY + (m.toY - m.fromY) * m.at + 0.5) * U;
+        this.pickRing.visible = true;
+        this.pickRing.position.set(x, 0.4, z);
+        if (this.pointers.size === 0) {
+          const k = 1 - Math.exp(-dt * 3);
+          this.target.x += (x - this.target.x) * k;
+          this.target.y += (z - this.target.y) * k;
+        }
+      } else this.pickRing.visible = false;
+    }
     if (this.pickRing.visible) this.pickRing.scale.setScalar(1 + Math.sin(this.time * 4) * 0.06);
     this.renderer.render(this.scene, this.camera);
     this.updateLabels(far);
@@ -748,7 +774,7 @@ export class WorldScene {
             s.scale.setScalar(1 + t * 2.5);
           }
         }
-        if (m.phase === 'there' && !m.battle) continue;
+        if (m.phase === 'there' && !m.battle && !m.standing) continue;
         if (atSea && ship < this.ships.length) {
           const sh = this.ships[ship++]!;
           sh.group.visible = true;

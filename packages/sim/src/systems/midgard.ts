@@ -563,9 +563,16 @@ export function recallMarch(state: GameState, id: number, now: number): string |
     state.world.cleared[m.target] = now + MIDGARD.nodeRegrowMs;
   }
   m.doneAt = now;
-  m.returnAt = now + (m.arriveAt - m.startAt);
+  m.returnAt = node
+    ? now + (m.arriveAt - m.startAt)
+    : now + Math.round(Math.hypot(m.x - state.world.home.x, m.y - state.world.home.y) * msPerTile(m.troops));
   return null;
 }
+
+/** A spot on the map as a march target: `p:x,y`. */
+export const isWaypoint = (id: string) => id.startsWith('p:');
+/** A column standing at a spot waits until told otherwise. */
+const STAND_FOREVER = Number.MAX_SAFE_INTEGER;
 
 /**
  * Turns a column on the road out towards a new target (owner request: steer your army
@@ -584,12 +591,37 @@ export function redirectMarch(
   // On the road out, or heading home after a fight: straight on to the next target.
   const outbound = now < m.arriveAt && m.reportId === null;
   const homeward = now >= m.doneAt && now < m.returnAt && sumCounts(m.troops) > 0;
-  if (!outbound && !homeward) return 'They are no longer on the road';
+  const stationed = isWaypoint(m.target) && now >= m.arriveAt && now < m.doneAt;
+  if (!outbound && !homeward && !stationed) return 'They are no longer on the road';
   if (m.target === targetId) return 'Your warriors are already on their way there';
   if (state.marches.some((q) => q.target === targetId)) return 'Your warriors are already on their way there';
-  const kind = targetId.startsWith('c') ? 'hunt' : 'attack';
   const pos = marchPos(state, m, now);
   const pace = msPerTile(m.troops);
+  // Any spot on the map: they walk there and stand until the next order (owner request).
+  if (isWaypoint(targetId)) {
+    const [px, py] = targetId.slice(2).split(',').map(Number) as [number, number];
+    const map = realmMap(state.world.realm);
+    if (
+      !Number.isInteger(px) ||
+      !Number.isInteger(py) ||
+      px < 0 ||
+      py < 0 ||
+      px >= map.size ||
+      py >= map.size
+    )
+      return 'Nothing to march on there';
+    m.target = targetId;
+    m.from = pos;
+    m.reportId = null;
+    m.x = px;
+    m.y = py;
+    m.startAt = now;
+    m.arriveAt = now + Math.max(MIDGARD.minRedirectMs, Math.round(Math.hypot(px - pos.x, py - pos.y) * pace));
+    m.doneAt = m.returnAt = STAND_FOREVER;
+    events.push({ type: 'march.started', kind: m.kind, target: targetId });
+    return null;
+  }
+  const kind = targetId.startsWith('c') ? 'hunt' : 'attack';
   const target = marchTarget(state, kind, targetId, now, pos, pace);
   if (typeof target === 'string') return target;
   const stamina = kind === 'hunt' ? (STAMINA.cost[(target as MapCamp).kind] ?? 10) : 0;
@@ -771,7 +803,11 @@ export function advanceMarches(state: GameState, now: number, events: GameEvent[
   if (!state.marches.length) return;
   const sorted = [...state.marches].sort((a, b) => a.arriveAt - b.arriveAt || a.id - b.id);
   for (const m of sorted) {
-    if (m.kind !== 'gather' && m.reportId === null && m.arriveAt <= now) fightAt(state, m, events);
+    if (m.kind !== 'gather' && m.reportId === null && m.arriveAt <= now) {
+      // 0: no battle (they reached a spot and stand there).
+      if (isWaypoint(m.target)) m.reportId = 0;
+      else fightAt(state, m, events);
+    }
     if (m.kind === 'gather' && now >= m.doneAt && !Object.keys(m.load).length) {
       const node = midgard(state.world.realm).nodes.find((n) => n.id === m.target);
       if (node && m.doneAt > m.arriveAt)
