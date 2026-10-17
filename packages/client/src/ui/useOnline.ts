@@ -76,8 +76,18 @@ export function useOnline(
       const s = store.snapshot;
       if (!homed.current) {
         const home = await realm.claimHome(s.world.realm, candidates(s.world.realm, s.world.home));
-        if (home.realm !== s.world.realm || home.x !== s.world.home.x || home.y !== s.world.home.y)
-          store.dispatch({ type: 'setHome', realm: home.realm, x: home.x, y: home.y });
+        if (home.realm !== s.world.realm || home.x !== s.world.home.x || home.y !== s.world.home.y) {
+          // Your device knows where you last moved: tell the server, unless that spot is taken
+          // (or you are only visiting the war zone), then take the server's spot.
+          const moved =
+            !s.world.origin &&
+            (await realm.moveHome(s.world.realm, s.world.home.x, s.world.home.y).then(
+              () => true,
+              () => false,
+            ));
+          if (!moved && !s.world.origin)
+            store.dispatch({ type: 'setHome', realm: home.realm, x: home.x, y: home.y });
+        }
         homed.current = true;
       }
       const now = store.snapshot;
@@ -111,6 +121,11 @@ export function useOnline(
         if (!on) return;
         const realm = realmService();
         for (const e of events) {
+          // A teleport at home moves the hold on the server too (not the war-zone visit).
+          if (e.type === 'teleported' && !store.snapshot.world.origin) {
+            const w = store.snapshot.world;
+            realm.moveHome(w.realm, w.home.x, w.home.y).catch((err: Error) => errorRef.current(err.message));
+          }
           if (e.type === 'pvp.fought') {
             realm
               .attack(e.targetId, e.won, e.defenderLosses, e.loot, 0)

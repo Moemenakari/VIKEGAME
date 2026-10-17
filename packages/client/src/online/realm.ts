@@ -51,6 +51,8 @@ export interface RealmService {
     realm: number,
     candidates: Array<[number, number]>,
   ): Promise<{ realm: number; x: number; y: number }>;
+  /** Moves your hold after a teleport (the tile must be free). */
+  moveHome(realm: number, x: number, y: number): Promise<void>;
   /** One write with everything other players need (never one write per change). */
   sync(hold: HoldSync): Promise<void>;
   /** Every hold of a realm, with names and alliances, in one query. */
@@ -103,6 +105,10 @@ export class SupabaseRealm implements RealmService {
     const { data, error } = await this.sb.rpc('claim_home', { realm, candidates });
     fail(error);
     return data as { realm: number; x: number; y: number };
+  }
+
+  async moveHome(realm: number, x: number, y: number): Promise<void> {
+    fail((await this.sb.rpc('move_home', { p_realm: realm, p_x: x, p_y: y })).error);
   }
 
   async sync(hold: HoldSync): Promise<void> {
@@ -247,6 +253,10 @@ export class LocalRealm implements RealmService {
     const [x, y] = candidates[0] ?? [0, 0];
     this.home ??= { realm, x, y };
     return this.home;
+  }
+
+  async moveHome(realm: number, x: number, y: number): Promise<void> {
+    this.home = { realm, x, y };
   }
 
   async sync(): Promise<void> {}

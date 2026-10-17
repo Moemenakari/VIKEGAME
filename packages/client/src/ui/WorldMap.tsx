@@ -146,9 +146,8 @@ export function WorldMap({
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [view, setView] = useState(() => {
-    // Start between your hold and the Law Rock, so both are in sight.
-    const c = (realmMap(state.world.realm).size - 1) / 2 + 0.5;
-    return { x: (state.world.home.x + 0.5 + c) / 2, y: (state.world.home.y + 0.5 + c) / 2, scale: 18 };
+    // Start on your own hold in the middle of the screen, with your neighbours around it.
+    return { x: state.world.home.x + 0.5, y: state.world.home.y + 0.5, scale: 24 };
   });
   const [picked, setPicked] = useState<Picked | null>(null);
   const [sheet, setSheet] = useState<'alliances' | 'events' | 'vs' | 'find' | 'friends' | null>(null);
@@ -546,8 +545,7 @@ export function WorldMap({
     }
     scene3d.current = sc;
     sc.setCompass(compassRef.current);
-    const c = (realmMap(state.world.realm).size - 1) / 2;
-    sc.focus(state.world.home.x * 0.8 + c * 0.2, state.world.home.y * 0.8 + c * 0.2, 210);
+    sc.focus(state.world.home.x, state.world.home.y, 130);
     sc.setMarches(() => marchViews(liveRef.current, store.now()));
     return () => {
       sc.dispose();
