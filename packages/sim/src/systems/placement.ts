@@ -61,8 +61,9 @@ export function placementError(
 /** A free spot for a new building: scans outward from the hall in rings. */
 export function suggestSpot(state: GameState, type: BuildingType): { x: number; z: number } | null {
   const max = buildRadius(state);
-  for (let radius = 9; radius <= max; radius += 1.5) {
-    const steps = Math.max(8, Math.round(radius * 1.5));
+  // Ring by ring outwards from the hall, fine enough to find every free gap.
+  for (let radius = 7; radius <= max; radius += 0.75) {
+    const steps = Math.max(12, Math.round(radius * 4));
     for (let i = 0; i < steps; i++) {
       // Start in front of the hall (towards the camera), then go round.
       const a = Math.PI / 2 + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * ((Math.PI * 2) / steps);

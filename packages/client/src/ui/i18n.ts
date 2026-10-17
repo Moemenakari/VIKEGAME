@@ -1739,6 +1739,38 @@ const ERRORS: Array<[RegExp, Record<Lang, string>]> = [
     /^Use it on the world map$/,
     { en: 'Use it on the world map', ar: 'استعمله من خريطة العالم', fr: 'À utiliser sur la carte' },
   ],
+  [
+    /^Too close to another building$/,
+    {
+      en: 'Too close to another building: drag it to free ground',
+      ar: 'قريب كتير من مبنى تاني: اسحبه لأرض فاضية',
+      fr: 'Trop près d’un autre bâtiment : déplacez-le',
+    },
+  ],
+  [
+    /^Too far out: upgrade the Great Hall for more land$/,
+    {
+      en: 'Too far out: upgrade the Great Hall for more land',
+      ar: 'بعيد كتير: طوّر القاعة الكبرى لتاخد أرض أكتر',
+      fr: 'Trop loin : améliorez la Grande Halle',
+    },
+  ],
+  [
+    /^Too close to the barrow$/,
+    { en: 'Too close to the barrow', ar: 'قريب كتير من التلّ', fr: 'Trop près du tertre' },
+  ],
+  [
+    /^The ground is too wet here$/,
+    { en: 'The ground is too wet here', ar: 'الأرض هون مبلولة كتير', fr: 'Le sol est trop humide ici' },
+  ],
+  [
+    /^The ground is too steep here$/,
+    { en: 'The ground is too steep here', ar: 'الأرض هون منحدرة كتير', fr: 'Le sol est trop pentu ici' },
+  ],
+  [
+    /^You cannot build that here$/,
+    { en: 'You cannot build that here', ar: 'ما فيك تبني هون', fr: 'Impossible de construire ici' },
+  ],
 ];
 
 const RES_EN: Record<string, ResourceId> = {

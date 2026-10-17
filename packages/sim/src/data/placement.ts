@@ -7,8 +7,8 @@
 export const PLACEMENT = {
   /** Usable radius around the hall centre at Great Hall 1, growing per level up to the max. */
   baseRadius: 16,
-  radiusPerHall: 1.5,
-  maxRadius: 23,
+  radiusPerHall: 2,
+  maxRadius: 30,
   /** Free space kept between two buildings (world units). */
   gap: 0.6,
   /** Ground must be at least this far above the sea, and this flat. */

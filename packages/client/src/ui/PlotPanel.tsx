@@ -82,15 +82,10 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
             const def = BUILDINGS[type];
             const spot = suggestSpot(state, type);
             const cmd: Command = { type: 'build', building: type, ...(spot ?? { x: 0, z: 0 }) };
-            const blocked: RuleError | null =
-              check(state, cmd, now) ??
-              (spot
-                ? null
-                : {
-                    code: 'OCCUPIED',
-                    message: 'No free ground: upgrade the Great Hall',
-                    need: { kind: 'building', building: 'greatHall', level: 2 },
-                  });
+            // Where it goes is chosen by hand in the next step, so a crowded hold never blocks
+            // the menu; only real rules do (Great Hall level, builders, resources, limits).
+            const err = check(state, cmd, now);
+            const blocked: RuleError | null = err && err.code !== 'OCCUPIED' ? err : null;
             return (
               <li key={type}>
                 <button
