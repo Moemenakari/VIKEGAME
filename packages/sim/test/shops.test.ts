@@ -19,6 +19,9 @@ import {
   type Command,
   type GameState,
 } from '../src';
+import { TEST_CODE, addTestCode } from './testCode';
+
+addTestCode();
 
 const T0 = Date.UTC(2026, 9, 15, 8, 0, 0); // a Thursday
 
@@ -208,10 +211,10 @@ describe('gift codes', () => {
   it('the test code gives a million of everything, once per hold; a wrong code is refused', () => {
     let s = newGame(1, T0);
     expect(apply(s, { type: 'redeemCode', code: 'NOPE' }, T0).ok).toBe(false);
-    s = must(s, { type: 'redeemCode', code: ' skal-million ' }, T0);
+    s = must(s, { type: 'redeemCode', code: ` ${TEST_CODE.toLowerCase()} ` }, T0);
     expect(s.resources.gold).toBeGreaterThanOrEqual(1_000_000);
     expect(s.resources.food).toBeGreaterThanOrEqual(1_000_000);
     expect(s.items['speed-8h']).toBe(100);
-    expect(apply(s, { type: 'redeemCode', code: 'SKAL-MILLION' }, T0).ok).toBe(false);
+    expect(apply(s, { type: 'redeemCode', code: ` ${TEST_CODE.toLowerCase()} ` }, T0).ok).toBe(false);
   });
 });

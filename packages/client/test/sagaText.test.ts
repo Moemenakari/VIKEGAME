@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { advance, apply, midgard, newGame, MIDGARD, type Command, type GameState } from '@jarlheim/sim';
+import { TEST_CODE, addTestCode } from '../../sim/test/testCode';
+
+addTestCode();
 
 // i18n touches the page on import: give it a bare one.
 const g = globalThis as Record<string, unknown>;
@@ -33,7 +36,7 @@ describe('reports in Arabic', () => {
     s = must(s, { type: 'scout', jarlId: jarl.id }, T0);
     s = must(s, { type: 'attackDraugr', level: 1, troops: { 'berserker-3': 300 } }, T0);
     s = must(s, { type: 'joinAlliance', alliance: (jarl.alliance! + 1) % 10 }, T0);
-    s = must(s, { type: 'redeemCode', code: 'SKAL-MILLION' }, T0);
+    s = must(s, { type: 'redeemCode', code: ` ${TEST_CODE.toLowerCase()} ` }, T0);
     const hall = Object.values(s.buildings).find((b) => b.type === 'greatHall')!;
     hall.level = MIDGARD.spyFromHall;
     s = advance(s, T0 + 1000).state;

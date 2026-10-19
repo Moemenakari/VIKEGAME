@@ -2,9 +2,9 @@ import type { Cost } from './resources';
 
 /**
  * Gift codes (owner request, for testing): typed in Settings, each works once per hold.
- * Only a hash of each code is kept here, so the code itself is not in the game files.
- * The test code gives a million of everything (decision D-057: a testing aid, to be
- * removed or replaced by real event codes before the stores).
+ * Only a hash of each code is kept here; the codes themselves are never written in this
+ * repository (the owner keeps them). The owner's code gives a million of everything
+ * (decision D-057: a testing aid, to be removed or replaced by event codes before the stores).
  */
 export interface GiftCode {
   hash: number;
@@ -14,9 +14,9 @@ export interface GiftCode {
   wallet: { alliance: number; medals: number; stamina: number };
 }
 
-export const GIFT_CODES: readonly GiftCode[] = [
+export const GIFT_CODES: GiftCode[] = [
   {
-    hash: 212_599_635,
+    hash: 2_809_233_647,
     name: 'Test: a million of everything',
     reward: { food: 1_000_000, timber: 1_000_000, iron: 1_000_000, silver: 1_000_000, gold: 1_000_000 },
     items: {

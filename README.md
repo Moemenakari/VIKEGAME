@@ -92,4 +92,4 @@ or CC0, credited in [`assets/CREDITS.md`](assets/CREDITS.md). Historical figures
 public-domain medieval sources, retold in our own words.
 
 ## © Licence
-© 2026 Moemen Akari. All rights reserved. The code is public to read and learn from; please ask before reusing it.
+© 2026 Moemen Akari. All rights reserved: see [LICENSE](LICENSE). The code is public to read and learn from; please ask before reusing any of it.

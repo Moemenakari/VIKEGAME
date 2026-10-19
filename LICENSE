@@ -1,0 +1,23 @@
+Copyright (c) 2026 Moemen Akari. All rights reserved.
+
+Jarlheim (the code, the game design, the documents, the art made in code and the
+written text in this repository) is the property of Moemen Akari.
+
+You may:
+  - read the code and the documents, and learn from them;
+  - play the game at its official addresses;
+  - link to this repository and write about it.
+
+You may not, without written permission from the owner:
+  - copy, publish, sell or host this game or any substantial part of it;
+  - make or publish a modified version or a game built from this code or design;
+  - use the name "Jarlheim", its texts or its images for another product.
+
+Third-party libraries keep their own licences (see package-lock.json), and assets
+listed in assets/CREDITS.md keep theirs. Historical sources are in the public
+domain; our retellings of them are part of this work.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+To ask for permission, open an issue on GitHub or contact the owner through
+the game's customer service.

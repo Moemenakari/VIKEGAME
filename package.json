@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "description": "Jarlheim — a free 3D mobile strategy game set in the Viking Age",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
   "workspaces": [
     "packages/sim",
     "packages/client"

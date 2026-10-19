@@ -11,6 +11,9 @@ import {
   type Command,
   type GameState,
 } from '../src';
+import { TEST_CODE, addTestCode } from './testCode';
+
+addTestCode();
 
 const T0 = Date.UTC(2026, 9, 16, 8, 0, 0);
 const run = (s: GameState, cmd: Command) => apply(s, cmd, T0);
@@ -111,7 +114,7 @@ describe('the mail', () => {
     let s = must(newGame(1, T0), { type: 'joinAlliance', alliance: 2 });
     expect(s.reports[0]!.kind).toBe('notice');
     expect(s.reports[0]!.title).toMatch(/^Joined · /);
-    s = must(s, { type: 'redeemCode', code: 'skal-million' });
+    s = must(s, { type: 'redeemCode', code: ` ${TEST_CODE.toLowerCase()} ` });
     expect(s.reports[0]!.title).toBe('Gift · Gift code');
     expect(s.reports.filter((q) => !q.read)).toHaveLength(2);
     s = must(s, { type: 'readAllReports' });
