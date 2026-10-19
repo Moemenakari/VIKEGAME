@@ -118,3 +118,33 @@ describe('the mail', () => {
     expect(s.reports.every((q) => q.read)).toBe(true);
   });
 });
+
+describe('the Thing Mound', () => {
+  it('lets the alliance help a build once and sends a daily gift, both growing with its level', () => {
+    const must = (st: GameState, cmd: Command, now = T0) => {
+      const r = apply(st, cmd, now);
+      if (!r.ok) throw new Error(r.error.message);
+      return r.state;
+    };
+    let s = newGame(1, T0);
+    s.resources.food = s.resources.timber = s.resources.silver = 1_000_000;
+    const hall = Object.values(s.buildings).find((b) => b.type === 'greatHall')!;
+    hall.level = 10;
+    s.buildings.tm = { id: 'tm', type: 'thingMound', level: 2, x: 30, z: 30, rot: 0 };
+    expect(apply(s, { type: 'claimAllianceGift' }, T0).ok).toBe(false); // no alliance yet
+    s = must(s, { type: 'joinAlliance', alliance: 1 });
+    const food = s.resources.food;
+    s = must(s, { type: 'claimAllianceGift' });
+    expect(s.resources.food).toBe(food + 2 * 600);
+    expect(apply(s, { type: 'claimAllianceGift' }, T0 + 1000).ok).toBe(false);
+    expect(apply(s, { type: 'claimAllianceGift' }, T0 + 86_400_000).ok).toBe(true);
+    const farm = Object.values(s.buildings).find((b) => b.type === 'farmstead')!;
+    s = must(s, { type: 'upgrade', buildingId: farm.id });
+    const job = s.queue[0]!;
+    const before = job.endsAt;
+    s = must(s, { type: 'allianceHelp', buildingId: farm.id });
+    expect(s.queue[0]!.endsAt).toBeLessThan(before);
+    expect(before - s.queue[0]!.endsAt).toBeLessThanOrEqual(5 * 60_000);
+    expect(apply(s, { type: 'allianceHelp', buildingId: farm.id }, T0).ok).toBe(false);
+  });
+});

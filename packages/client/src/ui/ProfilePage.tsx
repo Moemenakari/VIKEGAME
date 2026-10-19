@@ -383,6 +383,68 @@ function itemText(item: ItemDef): string {
 
 const TOPICS: TicketTopic[] = ['bug', 'account', 'player', 'idea', 'other'];
 
+/** Security answers for recovery, and changing the password (old one first, new one twice). */
+function SecuritySection({ toast }: { toast: (m: string) => void }) {
+  const [sec, setSec] = useState({ pet: '', phone: '', food: '' });
+  const [pw, setPw] = useState({ old: '', next: '', again: '' });
+  const say = (p: Promise<void>, ok: string) =>
+    p.then(
+      () => toast(ok),
+      (e: Error) => toast(e.message),
+    );
+  return (
+    <div className="security" data-testid="security">
+      <h3>🔐 {t('security')}</h3>
+      <p className="muted">{t('secWhy')}</p>
+      <form
+        className="pw-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void say(chatBackend().setSecurityAnswers(sec.pet, sec.phone, sec.food), t('secSaved'));
+        }}
+      >
+        {(['pet', 'phone', 'food'] as const).map((k) => (
+          <input
+            key={k}
+            value={sec[k]}
+            maxLength={40}
+            onChange={(e) => setSec({ ...sec, [k]: e.target.value })}
+            placeholder={t(k === 'pet' ? 'secPet' : k === 'phone' ? 'secPhone' : 'secFood')}
+          />
+        ))}
+        <button className="secondary small" type="submit" data-testid="sec-save">
+          {t('secSave')}
+        </button>
+      </form>
+      <form
+        className="pw-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (pw.next !== pw.again) return toast(t('passMismatch'));
+          void say(chatBackend().changePassword(pw.old, pw.next), t('passChanged')).then(() =>
+            setPw({ old: '', next: '', again: '' }),
+          );
+        }}
+      >
+        {(['old', 'next', 'again'] as const).map((k) => (
+          <input
+            key={k}
+            type="password"
+            value={pw[k]}
+            autoComplete={k === 'old' ? 'current-password' : 'new-password'}
+            onChange={(e) => setPw({ ...pw, [k]: e.target.value })}
+            placeholder={t(k === 'old' ? 'oldPass' : k === 'next' ? 'newPass' : 'newPass2')}
+            data-testid={`pw-${k}`}
+          />
+        ))}
+        <button className="secondary small" type="submit" data-testid="pw-change">
+          {t('changePass')}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function SettingsView({
   state,
   online,
@@ -435,6 +497,7 @@ function SettingsView({
           </button>
         )}
       </div>
+      {online.on && <SecuritySection toast={toast} />}
       <form
         className="setting-row gift-code"
         onSubmit={(e) => {

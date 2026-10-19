@@ -17,6 +17,7 @@ import {
   vsStandings,
   type Cost,
   type ShopId,
+  DAILY_QUESTS,
 } from '@jarlheim/sim';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { GameStore } from '../game/store';
@@ -776,6 +777,21 @@ function Game({
         {/* ---- the guide bar: always one clear next step ---- */}
         {main && !selected && !panel && !report && !placing && (
           <div className={`guide ${main.done ? 'ready' : ''}`} data-testid="guide">
+            {/* Daily quests are always one tap away, next to the main step (owner request). */}
+            <button
+              className={`guide-daily ${claimable > 0 ? 'ready' : ''}`}
+              onClick={() => {
+                setQuestTab('daily');
+                openPanel('quests');
+              }}
+              aria-label={t('daily')}
+              data-testid="guide-daily"
+            >
+              📅
+              <small>
+                {claimable > 0 ? `+${claimable}` : `${state.quests.claimed.length}/${DAILY_QUESTS.length}`}
+              </small>
+            </button>
             <button
               className="guide-text"
               onClick={() => {

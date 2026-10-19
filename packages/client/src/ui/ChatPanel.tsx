@@ -200,6 +200,7 @@ function SignIn({
   const [mode, setMode] = useState<'in' | 'up' | 'lost'>('in');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
+  const [sec, setSec] = useState({ pet: '', phone: '', food: '' });
   if (mode === 'lost') return <Recovery chat={chat} act={act} error={error} onBack={() => setMode('in')} />;
   return (
     <div className="sign-in" data-testid="sign-in">
@@ -227,7 +228,12 @@ function SignIn({
         className="pw-form"
         onSubmit={(e) => {
           e.preventDefault();
-          void act(() => (mode === 'up' ? chat.signUp(user, pass) : chat.signIn(user, pass)));
+          void act(async () => {
+            if (mode !== 'up') return chat.signIn(user, pass);
+            await chat.signUp(user, pass);
+            // Optional answers that help customer service give the account back if it is lost.
+            if (sec.pet || sec.phone || sec.food) await chat.setSecurityAnswers(sec.pet, sec.phone, sec.food);
+          });
         }}
       >
         <input
@@ -245,6 +251,21 @@ function SignIn({
           autoComplete={mode === 'up' ? 'new-password' : 'current-password'}
           data-testid="password"
         />
+        {mode === 'up' && (
+          <>
+            <p className="muted">{t('secWhy')}</p>
+            {(['pet', 'phone', 'food'] as const).map((k) => (
+              <input
+                key={k}
+                value={sec[k]}
+                maxLength={40}
+                onChange={(e) => setSec({ ...sec, [k]: e.target.value })}
+                placeholder={t(k === 'pet' ? 'secPet' : k === 'phone' ? 'secPhone' : 'secFood')}
+                data-testid={`sec-${k}`}
+              />
+            ))}
+          </>
+        )}
         <button className="primary" type="submit" data-testid="pw-submit">
           {mode === 'up' ? t('signUp') : t('signIn')}
         </button>
@@ -278,6 +299,9 @@ function Recovery({
   onBack: () => void;
 }) {
   const [f, setF] = useState({
+    pet: '',
+    phone: '',
+    food: '',
     name: '',
     id: '',
     realm: '',
@@ -317,6 +341,9 @@ function Recovery({
                 lastAttacker: f.attacker.trim(),
                 contact: f.contact.trim(),
                 note: f.note.trim(),
+                pet: f.pet,
+                phone: f.phone,
+                food: f.food,
               });
               setSent(true);
             });
@@ -339,6 +366,9 @@ function Recovery({
           </select>
           {field('alliance', t('recAlliance'))}
           {field('attacker', t('recAttacker'))}
+          {field('pet', t('secPet'))}
+          {field('phone', t('secPhone'))}
+          {field('food', t('secFood'))}
           {field('contact', t('recContact'))}
           {field('note', t('recNote'))}
           <button className="primary" type="submit" data-testid="rec-send">

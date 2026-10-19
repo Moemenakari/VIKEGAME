@@ -25,6 +25,8 @@ export interface ConstructionJob {
   targetLevel: number;
   startedAt: number;
   endsAt: number;
+  /** Alliance-mates already helped with this job (once per job). */
+  helped?: boolean;
 }
 
 export interface TrainingJob {
@@ -230,6 +232,8 @@ export interface GameState {
   };
   /** The harbour (owner request: control your fleet): ships kept in the boathouse stay out of sea fights. */
   harbour?: { docked: Record<string, number> };
+  /** The day the alliance gift at the Thing Mound was last taken. */
+  allianceGiftDay?: number;
   /** Your four saved squads: heroes and warriors (see systems/formations.ts). */
   formations?: Array<{ heroes: string[]; troops: Record<string, number> }>;
   /** The Bag: item id → how many. */

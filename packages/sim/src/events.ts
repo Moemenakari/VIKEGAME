@@ -35,6 +35,7 @@ export type GameEvent =
   | { type: 'teleported'; mode: string; realm: number }
   | { type: 'scout.done'; reportId: number }
   | { type: 'hold.spied'; jarlId: string; reportId: number }
+  | { type: 'alliance.helped'; buildingId: string; ms: number }
   | { type: 'vs.claimed'; won: boolean; items: Record<string, number>; reward: Cost }
   | {
       type: 'pvp.fought';

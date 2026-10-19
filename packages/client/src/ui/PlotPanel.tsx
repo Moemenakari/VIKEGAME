@@ -17,6 +17,8 @@ import {
   type GameState,
   type RuleError,
   dockedShips,
+  helpersFor,
+  ALLIANCES,
   ownShips,
 } from '@jarlheim/sim';
 import { useContext } from 'react';
@@ -157,6 +159,9 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
         <RaidSection state={state} now={now} onCall={() => run({ type: 'callRaid' })} />
       )}
       {building.type === 'shipyard' && building.level > 0 && <HarbourSection state={state} run={run} />}
+      {building.type === 'thingMound' && building.level > 0 && (
+        <ThingSection state={state} now={now} run={run} />
+      )}
 
       {job && left !== null ? (
         <div className="progress-block">
@@ -181,6 +186,15 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
               data-hint="finish"
             >
               {t('finishGold', { n: goldToFinish(left) })}
+            </button>
+          )}
+          {canAskHelp(state) && !job.helped && left > ECONOMY.freeFinishMs && (
+            <button
+              className="secondary"
+              onClick={() => run({ type: 'allianceHelp', buildingId: building.id })}
+              data-testid="ask-help"
+            >
+              🤝 {t('askHelp', { n: helpersFor(state) })}
             </button>
           )}
         </div>
@@ -214,6 +228,54 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
 }
 
 /** The watch on the wall: when the next raiders come, and a beacon to call them now (practice). */
+/** Alliance help is there once the Thing Mound stands and you are in an alliance. */
+const canAskHelp = (state: GameState) =>
+  state.world.alliance !== null &&
+  Object.values(state.buildings).some((b) => b.type === 'thingMound' && b.level > 0);
+
+/**
+ * The Thing Mound at work (owner request: every building does something real): your
+ * alliance, help with every build, and a daily gift, all larger with its level.
+ */
+function ThingSection({ state, now, run }: { state: GameState; now: number; run: (cmd: Command) => void }) {
+  const alliance = state.world.alliance;
+  const claimed = state.allianceGiftDay === Math.floor(now / 86_400_000);
+  const builds = state.queue.filter((j) => j.endsAt > now && !j.helped);
+  return (
+    <div className="section" data-testid="thing">
+      <h3>⚖️ {t('thingTitle')}</h3>
+      {alliance === null ? (
+        <p className="muted">{t('thingJoin')}</p>
+      ) : (
+        <>
+          <p className="stat">
+            🛡 [{ALLIANCES[alliance]!.tag}] {ALLIANCES[alliance]!.name} · 🤝{' '}
+            {t('helpers', { n: helpersFor(state) })} · ⚑ {formatAmount(state.wallet.alliance)}
+          </p>
+          <button
+            className="primary"
+            disabled={claimed}
+            onClick={() => run({ type: 'claimAllianceGift' })}
+            data-testid="alliance-gift"
+          >
+            🎁 {claimed ? t('giftTaken') : t('giftClaim')}
+          </button>
+          {builds.map((j) => (
+            <button
+              key={j.buildingId}
+              className="secondary"
+              onClick={() => run({ type: 'allianceHelp', buildingId: j.buildingId })}
+            >
+              🤝 {t('askHelpFor', { b: bName(state.buildings[j.buildingId]!.type) })}
+            </button>
+          ))}
+        </>
+      )}
+      <p className="muted">{t('thingHow')}</p>
+    </div>
+  );
+}
+
 /**
  * The harbour (owner request: control your fleet): ships on guard sail out against every
  * raid; ships kept docked in the boathouse stay out of the fight and are never lost.

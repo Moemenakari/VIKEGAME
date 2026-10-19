@@ -35,6 +35,10 @@ export interface RecoveryRequest {
   lastAttacker: string;
   contact: string;
   note: string;
+  /** Answers to the security questions (compared by customer service, kept only as hashes). */
+  pet: string;
+  phone: string;
+  food: string;
 }
 
 export type ChannelKind = 'realm' | 'clan' | 'group' | 'dm';
@@ -90,6 +94,10 @@ export interface ChatBackend {
   signIn(nameOrId: string, password: string): Promise<ConnectResult>;
   /** Forgot the name or password: ask customer service (works signed out). */
   requestRecovery(req: RecoveryRequest): Promise<void>;
+  /** Security questions for recovery: your pet's name, the phone you use, your favourite food. */
+  setSecurityAnswers(pet: string, phone: string, food: string): Promise<void>;
+  /** Change the password: the old one first, then the new one. */
+  changePassword(oldPassword: string, newPassword: string): Promise<void>;
   /** Play first, sign up later. */
   playAsGuest(): Promise<ConnectResult>;
   signOut(): Promise<void>;

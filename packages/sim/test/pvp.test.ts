@@ -37,6 +37,7 @@ describe('battles between players', () => {
     s.resources.food = 500;
     s = must(s, {
       type: 'sufferAttack',
+      attackerId: 'u-astrid',
       attackerName: 'Astrid',
       attackerWon: true,
       losses: { 'shieldwall-1': 50 },
@@ -46,6 +47,8 @@ describe('battles between players', () => {
     expect(s.army.troops['shieldwall-1'] ?? 0).toBe(0);
     expect(s.resources.food).toBe(0);
     expect(s.reports[0]!.title).toContain('Astrid');
+    // Whoever attacks you is your foe: red on the map.
+    expect(s.world.foes).toContain('u-astrid');
   });
 
   it('cleans snapshots from the server: unknown troops and absurd numbers are dropped', () => {

@@ -163,9 +163,28 @@ export class SupabaseBackend implements ChatBackend {
           p_last_attacker: r.lastAttacker,
           p_contact: r.contact,
           p_note: r.note,
+          p_pet: r.pet,
+          p_phone: r.phone,
+          p_food: r.food,
         })
       ).error,
     );
+  }
+
+  async setSecurityAnswers(pet: string, phone: string, food: string): Promise<void> {
+    fail((await this.sb.rpc('set_security_answers', { p_pet: pet, p_phone: phone, p_food: food })).error);
+  }
+
+  async changePassword(oldPassword: string, newPassword: string): Promise<void> {
+    if (newPassword.length < 6) throw new Error('Passwords need at least 6 characters');
+    const { data } = await this.sb.auth.getUser();
+    const email = data.user?.email;
+    if (!email) throw new Error('Only name + password accounts have a password');
+    // Prove the old password first.
+    const check = await this.sb.auth.signInWithPassword({ email, password: oldPassword });
+    if (check.error) throw new Error('The old password is wrong');
+    const { error } = await this.sb.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message);
   }
 
   async openTicket(topic: TicketTopic, body: string, meta: Record<string, string>): Promise<void> {

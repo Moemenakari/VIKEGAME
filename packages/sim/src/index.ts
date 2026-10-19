@@ -35,6 +35,8 @@ export * from './systems/midgard';
 export * from './systems/mail';
 export * from './systems/formations';
 export * from './systems/harbour';
+export * from './systems/thing';
+export * from './data/thing';
 export * from './data/vs';
 export * from './systems/vs';
 export * from './data/shops';

@@ -405,6 +405,13 @@ const LINES: Array<[RegExp, Tr]> = [
     { ar: 'غادرت {1}. أنت وحدك الآن.', fr: 'Vous avez quitté {1}. Vous êtes seul désormais.' },
   ],
   [
+    /^Your alliance sent its daily gift to the Thing Mound\.$/,
+    {
+      ar: 'أرسل تحالفك هديته اليومية إلى تلة المجلس.',
+      fr: 'Votre alliance a envoyé son cadeau du jour au Tertre du Thing.',
+    },
+  ],
+  [
     /^A gift code was redeemed\..*$/,
     {
       ar: 'تم استعمال كود هدية. كل شيء في مخازنك وحقيبتك.',
@@ -465,6 +472,7 @@ export function reportTitle(title: string, lang: Lang): { head: string; name: st
   if (lang !== 'en') {
     n = n
       .replace(/^Gift code$/, lang === 'ar' ? 'كود هدية' : 'Code cadeau')
+      .replace(/^Alliance gift$/, lang === 'ar' ? 'هدية التحالف' : 'Cadeau d’alliance')
       .replace(/^Season (\d+)$/, lang === 'ar' ? 'الموسم $1' : 'Saison $1');
   }
   if (column) n += ` · ${t('column')}`;

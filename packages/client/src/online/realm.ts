@@ -28,6 +28,7 @@ export interface PlayerAlliance {
 }
 
 export interface CollectedAttack {
+  attackerId: string;
   attackerName: string;
   attackerWon: boolean;
   losses: Record<string, number>;
@@ -206,6 +207,7 @@ export class SupabaseRealm implements RealmService {
     const { data: people } = await this.sb.from('profiles').select('id, display_name').in('id', ids);
     const names = new Map((people ?? []).map((p) => [p.id as string, p.display_name as string]));
     return rows.map((r) => ({
+      attackerId: r.attacker_id as string,
       attackerName: names.get(r.attacker_id as string) ?? '?',
       attackerWon: r.attacker_won as boolean,
       losses: r.defender_losses as Record<string, number>,

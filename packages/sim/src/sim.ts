@@ -16,6 +16,7 @@ import { AVATARS, DAILY_CHESTS, mainQuestAt } from './data/mainQuests';
 import { readAll, sendNotice } from './systems/mail';
 import { formationSend, setFormation } from './systems/formations';
 import { setHarbour } from './systems/harbour';
+import { allianceHelp, claimAllianceGift } from './systems/thing';
 import { activityPoints, mainGoalDone } from './systems/goals';
 import { DRAUGR_BANDS, DRAUGR_UNITS } from './data/draugr';
 import { MILITARY, TRAINED_AT, TROOPS } from './data/troops';
@@ -92,6 +93,8 @@ export type Command =
     }
   | {
       type: 'sufferAttack';
+      /** The attacker's player id: they become your foe (red on the map). */
+      attackerId?: string;
       attackerName: string;
       attackerWon: boolean;
       losses: Record<string, number>;
@@ -107,6 +110,8 @@ export type Command =
   | { type: 'redirect'; marchId: number; targetId: string }
   | { type: 'markFoe'; id: string; on: boolean }
   | { type: 'setHarbour'; docked: Record<string, number> }
+  | { type: 'allianceHelp'; buildingId: string }
+  | { type: 'claimAllianceGift' }
   | { type: 'intercept'; columnId: string; troops: Record<string, number>; formation?: number }
   | { type: 'setFormation'; index: number; heroes: string[]; troops: Record<string, number> }
   | { type: 'rally'; jarlId: string; troops: Record<string, number>; formation?: number }
@@ -603,6 +608,16 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     return err ? fail('NOT_READY', err) : null;
   },
 
+  allianceHelp(state, cmd, now, events) {
+    const err = allianceHelp(state, cmd.buildingId, now, events);
+    return err ? fail('NOT_READY', err) : null;
+  },
+
+  claimAllianceGift(state, _cmd, now) {
+    const err = claimAllianceGift(state, now);
+    return err ? fail('NOT_READY', err) : null;
+  },
+
   setHarbour(state, cmd) {
     const err = setHarbour(state, cmd.docked);
     return err ? fail('UNKNOWN', err) : null;
@@ -717,6 +732,7 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
 
   sufferAttack(state, cmd, _now, events) {
     sufferAttack(state, { ...cmd, attackerName: cmd.attackerName.slice(0, 20) }, events);
+    if (cmd.attackerId) markFoe(state, cmd.attackerId.slice(0, 64), true);
     return null;
   },
 

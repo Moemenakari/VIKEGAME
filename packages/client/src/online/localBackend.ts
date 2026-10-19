@@ -129,6 +129,16 @@ export class LocalBackend implements ChatBackend {
     this.recoveries.push(r);
   }
 
+  security: [string, string, string] | null = null;
+
+  async setSecurityAnswers(pet: string, phone: string, food: string): Promise<void> {
+    this.security = [pet, phone, food];
+  }
+
+  async changePassword(_old: string, next: string): Promise<void> {
+    if (next.length < 6) throw new Error('Passwords need at least 6 characters');
+  }
+
   async socialStats() {
     const mine = this.log.filter((m) => m.senderId === this.me?.id);
     const count = (e: string) =>
