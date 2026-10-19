@@ -3,6 +3,9 @@ import {
   HEROES,
   DRAUGR_BANDS,
   DRAUGR_UNITS,
+  FORMATIONS,
+  formationCapacity,
+  formations,
   ECONOMY,
   TROOPS,
   TROOP_TIERS,
@@ -262,11 +265,97 @@ export function ArmyPanel({
       <HelpTip id="warband" state={state} />
       <p className="norse">Lið · {t('warriorsHome', { n: sumCounts(state.army.troops) })}</p>
       <TroopList counts={state.army.troops} empty={t('noWarriors')} />
+      <SquadsSection state={state} run={run} />
       <HealSection state={state} now={now} run={run} />
       <button className="primary" onClick={onBarrow} data-testid="to-barrow">
         {t('toBarrow')}
       </button>
     </section>
+  );
+}
+
+/**
+ * The four squads (owner request): each with up to three heroes and its saved warriors.
+ * The squad's size grows with its heroes' levels; on the map one tap sends it.
+ */
+function SquadsSection({ state, run }: { state: GameState; run: Run }) {
+  const [open, setOpen] = useState(0);
+  const all = formations(state);
+  const f = all[open]!;
+  const cap = formationCapacity(state, f.heroes);
+  const owned = HEROES.filter((h) => state.heroes.owned[h.id]);
+  const land = Object.entries(state.army.troops).filter(([id, n]) => n > 0 && TROOPS[id]?.type !== 'ship');
+  const save = (heroes: string[], troops: Record<string, number>) =>
+    run({ type: 'setFormation', index: open, heroes, troops });
+  /** Fill the squad from the warriors at home, a fair share of each kind, up to its size. */
+  const fill = (heroes: string[]) => {
+    const c = formationCapacity(state, heroes);
+    const total = land.reduce((a, [, n]) => a + n, 0);
+    const k = total > c ? c / total : 1;
+    save(heroes, Object.fromEntries(land.map(([id, n]) => [id, Math.floor(n * k)])));
+  };
+  const toggle = (id: string) => {
+    const heroes = f.heroes.includes(id)
+      ? f.heroes.filter((h) => h !== id)
+      : [...f.heroes, id].slice(0, FORMATIONS.heroesPer);
+    // Keep the warriors if they still fit, otherwise refill to the new size.
+    if (sumCounts(f.troops) <= formationCapacity(state, heroes)) save(heroes, f.troops);
+    else fill(heroes);
+  };
+  return (
+    <div className="squads" data-testid="squads">
+      <h3>⚔ {t('squads')}</h3>
+      <p className="muted">{t('squadsHow')}</p>
+      <div className="tabs" role="tablist">
+        {all.map((q, i) => (
+          <button
+            key={i}
+            role="tab"
+            aria-selected={open === i}
+            className={open === i ? 'active' : ''}
+            onClick={() => setOpen(i)}
+            data-testid={`squad-tab-${i + 1}`}
+          >
+            {i + 1} · {formatAmount(sumCounts(q.troops))}
+          </button>
+        ))}
+      </div>
+      <p className="stat">
+        👥 {formatAmount(sumCounts(f.troops))} / {formatAmount(cap)} · ⭐ {f.heroes.length}/
+        {FORMATIONS.heroesPer}
+      </p>
+      <div className="hero-chips">
+        {owned.map((h) => {
+          const other = all.findIndex((q, i) => i !== open && q.heroes.includes(h.id));
+          return (
+            <button
+              key={h.id}
+              className={`chip ${f.heroes.includes(h.id) ? 'on' : ''}`}
+              onClick={() => toggle(h.id)}
+              data-testid={`squad-hero-${h.id}`}
+            >
+              {h.name.split(' ')[0]} {state.heroes.owned[h.id]!.level}
+              {other >= 0 && <small> ({other + 1})</small>}
+            </button>
+          );
+        })}
+      </div>
+      <p className="stat">
+        {Object.entries(f.troops).map(([id, n]) => (
+          <span key={id} className="cost">
+            <TroopTypeIcon type={TROOPS[id]!.type} size={14} /> {formatAmount(n)}
+          </span>
+        ))}
+      </p>
+      <div className="row">
+        <button className="primary small" onClick={() => fill(f.heroes)} data-testid="squad-fill">
+          {t('squadFill')}
+        </button>
+        <button className="secondary small" onClick={() => save(f.heroes, {})}>
+          {t('squadClear')}
+        </button>
+      </div>
+    </div>
   );
 }
 

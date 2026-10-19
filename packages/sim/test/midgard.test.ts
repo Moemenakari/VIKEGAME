@@ -15,6 +15,11 @@ import {
   jarlProfile,
   forts,
   nearest,
+  guardShips,
+  dockedShips,
+  FORMATIONS,
+  formationCapacity,
+  formations,
   columns,
   columnAt,
   marchPos,
@@ -385,6 +390,55 @@ describe('march speed and jarl profiles', () => {
     expect(apply(s, { type: 'redirect', marchId: id, targetId: 'p:-1,4' }, m.arriveAt + 62_000).ok).toBe(
       false,
     );
+  });
+
+  it('four saved squads: heroes lead them, their levels set how many warriors go, one tap sends them', () => {
+    let s = newGame(1, T0);
+    s.army.troops = { 'shieldwall-2': 2000, 'archer-2': 2000 };
+    s.heroes.owned['ketil']!.level = 10;
+    const cap = formationCapacity(s, ['ketil']);
+    expect(cap).toBe(FORMATIONS.baseCapacity + 10 * FORMATIONS.capacityPerHeroLevel);
+    expect(
+      apply(s, { type: 'setFormation', index: 0, heroes: ['ketil'], troops: { 'shieldwall-2': cap + 1 } }, T0)
+        .ok,
+    ).toBe(false);
+    s = must(
+      s,
+      {
+        type: 'setFormation',
+        index: 0,
+        heroes: ['ketil'],
+        troops: { 'shieldwall-2': cap - 100, 'archer-2': 100 },
+      },
+      T0,
+    );
+    // Moving the hero to squad 2 takes him out of squad 1.
+    s = must(s, { type: 'setFormation', index: 1, heroes: ['ketil'], troops: { 'archer-2': 50 } }, T0);
+    expect(formations(s)[0]!.heroes).toEqual([]);
+    expect(formations(s)[1]!.heroes).toEqual(['ketil']);
+    s = must(s, { type: 'setFormation', index: 0, heroes: [], troops: { 'shieldwall-2': 200 } }, T0);
+    const camps = midgard(1).camps.filter((c) => c.kind !== 'treasure');
+    s = must(s, { type: 'hunt', campId: camps[0]!.id, troops: {}, formation: 1 }, T0);
+    expect(s.marches[0]!.heroes).toEqual(['ketil']);
+    expect(s.marches[0]!.troops).toEqual({ 'archer-2': 50 });
+    // Ketil is out: squad 2 cannot go again until he is back; squad 1 can.
+    expect(apply(s, { type: 'hunt', campId: camps[1]!.id, troops: {}, formation: 1 }, T0).ok).toBe(false);
+    s = must(s, { type: 'hunt', campId: camps[1]!.id, troops: {}, formation: 0 }, T0);
+    expect(s.marches[1]!.troops).toEqual({ 'shieldwall-2': 200 });
+  });
+
+  it('the harbour: docked ships stay out of sea fights, the rest guard the fjord', () => {
+    let s = newGame(1, T0);
+    const ship = 'ship-1';
+    s.army.troops = { [ship]: 10 };
+    expect(apply(s, { type: 'setHarbour', docked: { [ship]: 11 } }, T0).ok).toBe(false);
+    expect(apply(s, { type: 'setHarbour', docked: { 'shieldwall-1': 1 } }, T0).ok).toBe(false);
+    s = must(s, { type: 'setHarbour', docked: { [ship]: 4 } }, T0);
+    expect(guardShips(s)).toEqual({ [ship]: 6 });
+    // Ships lost at sea come off the guard, never below what is docked.
+    s.army.troops[ship] = 3;
+    expect(dockedShips(s)).toEqual({ [ship]: 3 });
+    expect(guardShips(s)).toEqual({});
   });
 
   it("a jarl's profile splits its power and shows deeds, speed and heroes", () => {

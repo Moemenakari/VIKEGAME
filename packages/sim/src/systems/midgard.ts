@@ -489,6 +489,7 @@ export function startMarch(
   now: number,
   events: GameEvent[],
   rally = false,
+  heroes?: string[],
 ): string | null {
   const found = marchTarget(state, kind, targetId, now, state.world.home, msPerTile(troops));
   if (typeof found === 'string') return found;
@@ -528,6 +529,7 @@ export function startMarch(
     load: {},
     reportId: null,
     ...(allies ? { allies } : {}),
+    ...(heroes?.length ? { heroes } : {}),
   };
   state.marches.push(march);
   events.push({ type: 'march.started', kind, target: targetId });
@@ -672,7 +674,9 @@ function fightAt(state: GameState, m: March, events: GameEvent[]): void {
     });
   }
   const defenders = col ? columnDefenders(col) : jarl ? jarlDefenders(jarl) : campDefenders(camp!);
-  const hm = heroMods(state, jarl ? 'conquest' : 'barrow');
+  // A squad fights with its own heroes; otherwise your main squad leads.
+  const leaders = m.heroes ? { heroes: { ...state.heroes, squad: m.heroes } } : state;
+  const hm = heroMods(leaders, jarl ? 'conquest' : 'barrow');
   const outcome = resolveBattle(attackers, defenders, rng, { attacker: hm.ours, defender: hm.theirs });
   let room = Math.max(
     0,

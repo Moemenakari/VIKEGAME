@@ -16,12 +16,14 @@ import {
   type Command,
   type GameState,
   type RuleError,
+  dockedShips,
+  ownShips,
 } from '@jarlheim/sim';
 import { useContext } from 'react';
 import type { GameStore } from '../game/store';
 import { NeedContext, NeedLink } from './NeedLink';
 import { formatAmount, formatCost, formatDuration } from './format';
-import { bDesc, bName, errorText, t } from './i18n';
+import { bDesc, bName, errorText, t, troopName } from './i18n';
 import { ResourceIcon } from './icons';
 import { HealSection, TrainSection } from './military';
 import { HelpTip } from './help';
@@ -154,6 +156,7 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
       {def.wall && building.level > 0 && (
         <RaidSection state={state} now={now} onCall={() => run({ type: 'callRaid' })} />
       )}
+      {building.type === 'shipyard' && building.level > 0 && <HarbourSection state={state} run={run} />}
 
       {job && left !== null ? (
         <div className="progress-block">
@@ -211,6 +214,42 @@ export function PlotPanel({ store, state, plotId, onClose, onError, onChoose, on
 }
 
 /** The watch on the wall: when the next raiders come, and a beacon to call them now (practice). */
+/**
+ * The harbour (owner request: control your fleet): ships on guard sail out against every
+ * raid; ships kept docked in the boathouse stay out of the fight and are never lost.
+ */
+function HarbourSection({ state, run }: { state: GameState; run: (cmd: Command) => void }) {
+  const own = ownShips(state);
+  const docked = dockedShips(state);
+  const set = (id: string, n: number) =>
+    run({ type: 'setHarbour', docked: { ...docked, [id]: Math.max(0, Math.min(own[id] ?? 0, n)) } });
+  return (
+    <div className="section" data-testid="harbour">
+      <h3>⚓ {t('harbour')}</h3>
+      <p className="muted">{t('harbourHow')}</p>
+      {Object.keys(own).length === 0 && <p className="muted">{t('noShips')}</p>}
+      {Object.entries(own).map(([id, n]) => {
+        const d = docked[id] ?? 0;
+        return (
+          <div key={id} className="harbour-row">
+            <span>
+              ⛵ {troopName(id)} · 🛡 {t('onGuard')} <b>{n - d}</b> · ⚓ {t('docked')} <b>{d}</b>
+            </span>
+            <span className="row">
+              <button className="secondary small" onClick={() => set(id, 0)} data-testid={`guard-all-${id}`}>
+                {t('allGuard')}
+              </button>
+              <button className="secondary small" onClick={() => set(id, n)} data-testid={`dock-all-${id}`}>
+                {t('allDock')}
+              </button>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function RaidSection({ state, now, onCall }: { state: GameState; now: number; onCall: () => void }) {
   const incoming = state.raid.incoming;
   return (

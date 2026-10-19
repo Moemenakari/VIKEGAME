@@ -34,6 +34,8 @@ import {
   isWaypoint,
   columnAt,
   type MapColumn,
+  busyHeroes,
+  formations,
   jarlProfile,
   HEROES,
   vsResult,
@@ -1351,6 +1353,7 @@ function TroopPicker({
   info,
   onSend,
   allies,
+  squads,
 }: {
   state: GameState;
   /** Strength of the defenders, or null when there is no battle (gathering). */
@@ -1360,8 +1363,20 @@ function TroopPicker({
   action: string;
   testId: string;
   info?: (send: Record<string, number>) => ReactNode;
-  onSend: (send: Record<string, number>) => void;
+  /** With squads: a saved squad goes by its number (owner request: four squads). */
+  onSend: (send: Record<string, number>, squad?: number) => void;
+  squads?: boolean;
 }) {
+  const busy = busyHeroes(state);
+  const saved = squads
+    ? formations(state)
+        .map((f, i) => ({
+          f,
+          i,
+          n: Object.entries(f.troops).reduce((a, [id, c]) => a + Math.min(c, state.army.troops[id] ?? 0), 0),
+        }))
+        .filter((q) => q.n > 0)
+    : [];
   const land = Object.fromEntries(
     Object.entries(state.army.troops).filter(([id, n]) => n > 0 && TROOPS[id]?.type !== 'ship'),
   );
@@ -1376,6 +1391,27 @@ function TroopPicker({
     theirs === null ? null : ours >= theirs * 1.6 ? 'favourable' : ours >= theirs * 1.1 ? 'even' : 'risky';
   return (
     <>
+      {saved.length > 0 && (
+        <div className="squad-send" data-testid="squad-send">
+          {saved.map(({ f, i, n }) => {
+            const out = f.heroes.some((h) => busy.has(h));
+            return (
+              <button
+                key={i}
+                className="secondary small"
+                disabled={out}
+                data-testid={`send-squad-${i + 1}`}
+                onClick={() => onSend({}, i)}
+              >
+                <b>{i + 1}</b>{' '}
+                {f.heroes.length ? HEROES.find((h) => h.id === f.heroes[0])?.name.split(' ')[0] : '⚔'} ·{' '}
+                {formatAmount(n)}
+                {out && ' ⏳'}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="send-list">
         {Object.entries(land).map(([id, n]) => (
           <label key={id} className="send-item">
@@ -1558,8 +1594,14 @@ function ColumnCard({
             theirs={armyStrength(defenders)}
             action={`⚔ ${t('march')}`}
             testId="march-ambush"
-            onSend={(troops) => {
-              const err = store.dispatch({ type: 'intercept', columnId: column.id, troops });
+            squads
+            onSend={(troops, f) => {
+              const err = store.dispatch({
+                type: 'intercept',
+                columnId: column.id,
+                troops,
+                ...(f === undefined ? {} : { formation: f }),
+              });
               if (err) onError(err.message);
               else onClose();
             }}
@@ -1744,11 +1786,12 @@ function MapTargetCard({
               {marchInfo(send)}
             </>
           )}
-          onSend={(troops) =>
+          squads
+          onSend={(troops, f) =>
             dispatch(
               sending === 'rally'
-                ? { type: 'rally', jarlId: j.id, troops }
-                : { type: 'attackJarl', jarlId: j.id, troops },
+                ? { type: 'rally', jarlId: j.id, troops, ...(f === undefined ? {} : { formation: f }) }
+                : { type: 'attackJarl', jarlId: j.id, troops, ...(f === undefined ? {} : { formation: f }) },
             )
           }
         />
@@ -1803,7 +1846,10 @@ function MapTargetCard({
               {marchInfo(send)}
             </>
           )}
-          onSend={(troops) => dispatch({ type: 'hunt', campId: cp.id, troops })}
+          squads
+          onSend={(troops, f) =>
+            dispatch({ type: 'hunt', campId: cp.id, troops, ...(f === undefined ? {} : { formation: f }) })
+          }
         />
       );
   } else {
@@ -1849,7 +1895,10 @@ function MapTargetCard({
               </>
             );
           }}
-          onSend={(troops) => dispatch({ type: 'gather', nodeId: n.id, troops })}
+          squads
+          onSend={(troops, f) =>
+            dispatch({ type: 'gather', nodeId: n.id, troops, ...(f === undefined ? {} : { formation: f }) })
+          }
         />
       );
   }

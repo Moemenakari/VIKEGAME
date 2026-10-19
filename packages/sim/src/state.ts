@@ -104,6 +104,8 @@ export interface March {
   reportId: number | null;
   /** A rally: alliance-mates' warriors march with yours (they are not yours to lose). */
   allies?: Record<string, number>;
+  /** The heroes leading this column (a squad); otherwise your main squad fights. */
+  heroes?: string[];
   /** Where the column set out on its current leg, if not from the hold (it changed course). */
   from?: { x: number; y: number };
 }
@@ -226,6 +228,10 @@ export interface GameState {
     horns: number;
     pity: { epic: number; legendary: number };
   };
+  /** The harbour (owner request: control your fleet): ships kept in the boathouse stay out of sea fights. */
+  harbour?: { docked: Record<string, number> };
+  /** Your four saved squads: heroes and warriors (see systems/formations.ts). */
+  formations?: Array<{ heroes: string[]; troops: Record<string, number> }>;
   /** The Bag: item id → how many. */
   items: Record<string, number>;
   /** Deeds for the profile (owner request: how many you have slain, battles won...). */

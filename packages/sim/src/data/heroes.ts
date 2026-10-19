@@ -180,6 +180,17 @@ export const HEROES: readonly HeroDef[] = [
   },
 ];
 
+/**
+ * Squads (owner request: "four squads, each with its heroes and its warriors, saved and
+ * sent every time"). A squad can carry more warriors the higher its heroes' levels.
+ */
+export const FORMATIONS = {
+  count: 4,
+  heroesPer: 3,
+  baseCapacity: 300,
+  capacityPerHeroLevel: 20,
+};
+
 export const HERO_RULES = {
   squadSize: 3,
   /** Each hero adds this share to the stats of the troop type they lead, per level. */

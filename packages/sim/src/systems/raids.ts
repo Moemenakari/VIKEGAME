@@ -1,3 +1,4 @@
+import { guardShips } from './harbour';
 import { BUILDINGS } from '../data/buildings';
 import { PRODUCED_RESOURCES, type Cost } from '../data/resources';
 import { RAIDS, RAID_VARIANTS, type RaidVariant } from '../data/raids';
@@ -144,9 +145,8 @@ export function resolveRaid(state: GameState, raid: IncomingRaid, now: number, e
   let crew = { ...raid.crew };
 
   // ---- at sea
-  const ourShips = Object.fromEntries(
-    Object.entries(state.army.troops).filter(([id, n]) => TROOPS[id]?.type === 'ship' && n > 0),
-  );
+  // Only the ships on guard sail out; docked ones wait in the boathouse (the harbour).
+  const ourShips = guardShips(state);
   if (sumCounts(ourShips) > 0) {
     const sea = resolveBattle(stacksOf(ourShips), stacksOf(raid.ships), rng, {
       attacker: hm.ours,

@@ -14,6 +14,8 @@ import type { Cost } from './data/resources';
 import { DAILY_QUESTS } from './data/quests';
 import { AVATARS, DAILY_CHESTS, mainQuestAt } from './data/mainQuests';
 import { readAll, sendNotice } from './systems/mail';
+import { formationSend, setFormation } from './systems/formations';
+import { setHarbour } from './systems/harbour';
 import { activityPoints, mainGoalDone } from './systems/goals';
 import { DRAUGR_BANDS, DRAUGR_UNITS } from './data/draugr';
 import { MILITARY, TRAINED_AT, TROOPS } from './data/troops';
@@ -98,14 +100,16 @@ export type Command =
     }
   | { type: 'joinAlliance'; alliance: number | null }
   | { type: 'conquerTile'; x: number; y: number; troops: Record<string, number> }
-  | { type: 'gather'; nodeId: string; troops: Record<string, number> }
-  | { type: 'hunt'; campId: string; troops: Record<string, number> }
-  | { type: 'attackJarl'; jarlId: string; troops: Record<string, number> }
+  | { type: 'gather'; nodeId: string; troops: Record<string, number>; formation?: number }
+  | { type: 'hunt'; campId: string; troops: Record<string, number>; formation?: number }
+  | { type: 'attackJarl'; jarlId: string; troops: Record<string, number>; formation?: number }
   | { type: 'recall'; marchId: number }
   | { type: 'redirect'; marchId: number; targetId: string }
   | { type: 'markFoe'; id: string; on: boolean }
-  | { type: 'intercept'; columnId: string; troops: Record<string, number> }
-  | { type: 'rally'; jarlId: string; troops: Record<string, number> }
+  | { type: 'setHarbour'; docked: Record<string, number> }
+  | { type: 'intercept'; columnId: string; troops: Record<string, number>; formation?: number }
+  | { type: 'setFormation'; index: number; heroes: string[]; troops: Record<string, number> }
+  | { type: 'rally'; jarlId: string; troops: Record<string, number>; formation?: number }
   | { type: 'scout'; jarlId: string }
   | { type: 'buy'; shop: ShopId; offerId: string; count: number }
   | {
@@ -290,6 +294,14 @@ export function advance(prev: GameState, now: number): StepResult {
 }
 
 // ---- commands --------------------------------------------------------------
+
+/** The warriors (and heroes) a march takes: a saved squad, or the ones picked by hand. */
+function sendFor(
+  state: GameState,
+  cmd: { troops: Record<string, number>; formation?: number },
+): { troops: Record<string, number>; heroes?: string[] } | string {
+  return cmd.formation === undefined ? { troops: cmd.troops } : formationSend(state, cmd.formation);
+}
 
 function startJob(
   state: GameState,
@@ -546,22 +558,30 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
   },
 
   gather(state, cmd, now, events) {
-    const err = startMarch(state, 'gather', cmd.nodeId, cmd.troops, now, events);
+    const send = sendFor(state, cmd);
+    if (typeof send === 'string') return fail('NOT_READY', send, { kind: 'troops' });
+    const err = startMarch(state, 'gather', cmd.nodeId, send.troops, now, events, false, send.heroes);
     return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
   },
 
   hunt(state, cmd, now, events) {
-    const err = startMarch(state, 'hunt', cmd.campId, cmd.troops, now, events);
+    const send = sendFor(state, cmd);
+    if (typeof send === 'string') return fail('NOT_READY', send, { kind: 'troops' });
+    const err = startMarch(state, 'hunt', cmd.campId, send.troops, now, events, false, send.heroes);
     return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
   },
 
   attackJarl(state, cmd, now, events) {
-    const err = startMarch(state, 'attack', cmd.jarlId, cmd.troops, now, events);
+    const send = sendFor(state, cmd);
+    if (typeof send === 'string') return fail('NOT_READY', send, { kind: 'troops' });
+    const err = startMarch(state, 'attack', cmd.jarlId, send.troops, now, events, false, send.heroes);
     return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
   },
 
   rally(state, cmd, now, events) {
-    const err = startMarch(state, 'attack', cmd.jarlId, cmd.troops, now, events, true);
+    const send = sendFor(state, cmd);
+    if (typeof send === 'string') return fail('NOT_READY', send, { kind: 'troops' });
+    const err = startMarch(state, 'attack', cmd.jarlId, send.troops, now, events, true, send.heroes);
     return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
   },
 
@@ -583,6 +603,16 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
     return err ? fail('NOT_READY', err) : null;
   },
 
+  setHarbour(state, cmd) {
+    const err = setHarbour(state, cmd.docked);
+    return err ? fail('UNKNOWN', err) : null;
+  },
+
+  setFormation(state, cmd) {
+    const err = setFormation(state, cmd.index, cmd.heroes, cmd.troops);
+    return err ? fail('UNKNOWN', err) : null;
+  },
+
   redirect(state, cmd, now, events) {
     const err = redirectMarch(state, cmd.marchId, cmd.targetId, now, events);
     return err ? fail('NOT_READY', err) : null;
@@ -590,7 +620,9 @@ const handlers: { [K in Command['type']]: Handler<Extract<Command, { type: K }>>
 
   intercept(state, cmd, now, events) {
     if (!cmd.columnId.startsWith('t')) return fail('UNKNOWN', 'Nothing to march on there');
-    const err = startMarch(state, 'attack', cmd.columnId, cmd.troops, now, events);
+    const send = sendFor(state, cmd);
+    if (typeof send === 'string') return fail('NOT_READY', send, { kind: 'troops' });
+    const err = startMarch(state, 'attack', cmd.columnId, send.troops, now, events, false, send.heroes);
     return err ? fail('NOT_READY', err, err.includes('troops') ? { kind: 'troops' } : undefined) : null;
   },
 
