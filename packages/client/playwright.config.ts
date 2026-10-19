@@ -3,9 +3,13 @@ import { defineConfig, devices } from '@playwright/test';
 // Locally a pre-installed Chromium can be used with PW_CHROMIUM_PATH=/path/to/chrome.
 const executablePath = process.env.PW_CHROMIUM_PATH;
 
+// GitHub's runners draw the 3D map in software, several times slower than a phone: give them time.
+const slow = process.env.CI ? 3 : 1;
+
 export default defineConfig({
   testDir: './e2e',
-  timeout: 60_000,
+  timeout: 60_000 * slow,
+  expect: { timeout: 5_000 * slow },
   reporter: [['list']],
   use: {
     baseURL: 'http://localhost:4173',

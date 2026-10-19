@@ -2745,13 +2745,9 @@ body,
 }
 
 .world-help {
-  position: absolute;
-  top: 4px;
-  inset-inline-end: 0;
-}
-
-.world-top .realm-tabs {
-  padding-inline-end: 38px;
+  position: relative;
+  display: grid;
+  place-items: center;
 }
 
 .world-help .help-btn {
@@ -2760,8 +2756,8 @@ body,
 
 .world-help .help-box {
   position: absolute;
-  top: 36px;
-  inset-inline-end: 0;
+  top: 0;
+  inset-inline-end: 40px;
   width: min(86vw, 360px);
   z-index: 6;
   background: var(--plate);

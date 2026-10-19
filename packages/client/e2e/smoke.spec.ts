@@ -233,7 +233,7 @@ test('a palisade, and raiders called by the beacon sail in', async ({ page }) =>
 });
 
 test('the globe opens Midgard: realms, alliances, the King and the wars', async ({ page }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(150_000 * (process.env.CI ? 3 : 1));
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?quality=low');

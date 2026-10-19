@@ -719,9 +719,6 @@ export function WorldMap({
         />
       )}
       <header className="world-top">
-        <div className="world-help">
-          <HelpTip id="world" state={state} auto={false} />
-        </div>
         <div className="realm-tabs" role="tablist">
           {REALMS.map((r) => (
             <button
@@ -800,6 +797,9 @@ export function WorldMap({
         )}
       </header>
       <aside className="world-side">
+        <div className="world-help">
+          <HelpTip id="world" state={state} auto={false} />
+        </div>
         {mine && (
           <button
             className="round"
