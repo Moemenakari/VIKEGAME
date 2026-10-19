@@ -1,5 +1,5 @@
 # ⚔️ Jarlheim
-
+viking? yes
 > *"Cattle die, kinsmen die… but fame never dies for the one who earns it."* (after *Hávamál*)
 
 **A free 3D Viking strategy game you play right in your phone's browser. No download, no store, no payments. Just your hold, your army, your alliance and a whole living realm to conquer.**
